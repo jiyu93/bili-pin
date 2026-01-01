@@ -7,6 +7,7 @@
 - **置顶UP点击后可切 Feed**：即使该 UP 不在当前推荐横条里也能切
 - **选中高亮**：置顶栏选中态为蓝色圆环 + 蓝色文字（用 `box-shadow`，不抖动）
 - **图标**：图钉（Tabler outline/filled 两态），取消（Tabler x）
+- **个人空间主页** `https://space.bilibili.com/*`：在右上角“已关注”按钮的 hover 菜单里新增“置顶动态/取消置顶”，与动态页置顶数据完全共用
 
 ## 核心架构（为什么这样做）
 目标：**不碰 B 站前端状态机**，通过改写请求参数让 B 站自行渲染正确的 feed。
@@ -24,7 +25,13 @@
    - `initApiInterceptor()` 先拦截 API
    - `observeUpAvatarStrip(...)` 找到推荐横条根节点后调用 `injectPinUi()`
 
-2. `src/bili/apiInterceptor.ts`
+2. `entrypoints/space.content.ts`
+   - `runAt: document_idle` + `world: 'MAIN'`
+   - 监听 `body` 直接子节点新增的 `.vui_popover`（teleport 弹层容器），找到其中的 `.menu-popover__panel` 后插入一条 `.menu-popover__panel-item`
+     - **位置**：优先放在“设置分组”上方，其次“取消关注”上方
+     - **样式**：克隆一条原生菜单项作为模板（scoped CSS 需要 `data-v-*` 等属性），避免出现“字体颜色/hover 背景不一致”
+
+3. `src/bili/apiInterceptor.ts`
    - 拦截 `fetch`/`XHR`
    - 解析 `/x/polymer/web-dynamic/v1/portal` 的 `up_list.items[]`，缓存 `mid/name/face`
    - 若设置了 `desiredHostMid`：改写 `feed/*` 的 `host_mid`
@@ -45,6 +52,7 @@
   - `html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs { display:none }`：置顶筛选态隐藏 tabs
   - 置顶栏高亮用 `box-shadow` 圆环（避免 border 导致尺寸抖动）
   - 图钉按钮两态：未置顶显示 outline，已置顶显示 filled（颜色通过 `color` 控制）
+  - space 页菜单项：保持与原生菜单一致（不做 pinned 态高亮，避免样式串扰）
 
 ## 数据存储
 - `src/storage/pins.ts`
@@ -61,6 +69,7 @@
 - 点击置顶栏任意 UP：Feed 切换成功（UP 不在推荐横条也可）
 - 置顶筛选态：tabs 隐藏；点推荐横条/tabs 后退出筛选态
 - 连续切换置顶栏多个 UP：每次都触发切换，不出现“第二次没反应”
+- 打开任意 UP 个人空间主页：hover 右上角“已关注”→ 菜单里出现“置顶动态/取消置顶”（优先位于“设置分组”上方）；点击可写入/移除置顶数据（刷新动态页可见同步）
 
 ## 待办（优先级从高到低）
 - 拖拽排序（`pinBar.ts` + `pins.ts` 增加顺序字段）

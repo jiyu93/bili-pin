@@ -1,7 +1,7 @@
 {
   "name": "bili-pin",
   "version": "0.0.1",
-  "description": "Bilibili 动态页置顶UP（浏览器扩展）",
+  "description": "Bilibili 动态页置顶UP + 个人空间页已关注菜单置顶动态（浏览器扩展）",
   "private": true,
   "scripts": {
     "dev": "wxt",
