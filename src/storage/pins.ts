@@ -37,10 +37,6 @@ function uniqByUid(list: PinnedUp[]): PinnedUp[] {
   return Array.from(map.values());
 }
 
-function sortPinned(list: PinnedUp[]): PinnedUp[] {
-  return [...list].sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
-}
-
 async function storageGet<T>(key: string, fallback: T): Promise<T> {
   const chromeStorage = (globalThis as any).chrome?.storage?.local;
   if (chromeStorage?.get) {
@@ -177,7 +173,7 @@ export async function getPinnedUps(): Promise<PinnedUp[]> {
   const list = await storageGet<any[]>(STORAGE_KEY, []);
   const raw = Array.isArray(list) ? list : [];
   const normalized = raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[];
-  const next = sortPinned(uniqByUid(normalized));
+  const next = uniqByUid(normalized);
 
   // 如果发生了迁移/去重，写回一次，清理“脏数据”
   const beforeKey = JSON.stringify(
@@ -194,7 +190,7 @@ export async function getPinnedUps(): Promise<PinnedUp[]> {
 export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
   const raw = Array.isArray(list) ? list : [];
   const normalized = raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[];
-  await storageSet(STORAGE_KEY, sortPinned(uniqByUid(normalized)));
+  await storageSet(STORAGE_KEY, uniqByUid(normalized));
 }
 
 export async function isPinned(mid: string): Promise<boolean> {

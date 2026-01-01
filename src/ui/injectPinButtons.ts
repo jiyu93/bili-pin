@@ -343,6 +343,26 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
         console.warn('[bili-pin] unpin failed', err);
       }
     },
+    onReorder: async (newOrderMids) => {
+      const pinned = await getPinnedUps();
+      const map = new Map(pinned.map((p) => [p.mid, p]));
+      const next: PinnedUp[] = [];
+
+      for (const mid of newOrderMids) {
+        const p = map.get(mid);
+        if (p) {
+          next.push(p);
+          map.delete(mid);
+        }
+      }
+
+      // 兜底：保留任何不在新顺序里的项
+      for (const p of map.values()) {
+        next.push(p);
+      }
+
+      await setPinnedUps(next);
+    },
   });
 
   renderButtons(stripRoot, pinnedSet);

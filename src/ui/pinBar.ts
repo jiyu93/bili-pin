@@ -10,10 +10,13 @@ const PIN_BAR_EXPANDED_KEY = 'biliPin.ui.pinBarExpanded.v1';
 export type PinBarHandlers = {
   onClickMid?: (mid: string) => void;
   onUnpinMid?: (mid: string) => void;
+  onReorder?: (mids: string[]) => void;
 };
 
 // 当前选中的UP mid（用于高亮显示）
 let currentActiveMid: string | null = null;
+// 当前正在拖拽的UP mid
+let draggingMid: string | null = null;
 
 async function storageGetBool(key: string, fallback: boolean): Promise<boolean> {
   const chromeStorage = (globalThis as any).chrome?.storage?.local;
@@ -213,6 +216,68 @@ export function renderPinBar(
     const item = document.createElement('div');
     item.className = 'bili-pin-bar__item';
     item.dataset.mid = up.mid;
+    item.draggable = true;
+
+    // 拖拽事件
+    item.addEventListener('dragstart', (e) => {
+      draggingMid = up.mid;
+      item.classList.add('is-dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', up.mid);
+      }
+      // 延迟让样式生效，避免拖拽时的ghost也是透明的
+      requestAnimationFrame(() => {
+        item.classList.add('is-ghost');
+      });
+    });
+
+    item.addEventListener('dragend', () => {
+      const wasDragging = draggingMid;
+      draggingMid = null;
+      item.classList.remove('is-dragging', 'is-ghost');
+
+      if (wasDragging) {
+        const newOrder = Array.from(list.querySelectorAll<HTMLElement>('.bili-pin-bar__item'))
+          .map((el) => el.dataset.mid)
+          .filter(Boolean) as string[];
+
+        // 检查顺序是否变化
+        const oldOrder = pinned.map((p) => p.mid);
+        if (JSON.stringify(newOrder) !== JSON.stringify(oldOrder)) {
+          handlers.onReorder?.(newOrder);
+        }
+      }
+    });
+
+    item.addEventListener('dragover', (e) => {
+      e.preventDefault(); // 允许 drop
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+    });
+
+    item.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      if (!draggingMid || draggingMid === up.mid) return;
+
+      const draggingEl = list.querySelector<HTMLElement>(
+        `.bili-pin-bar__item[data-mid="${draggingMid}"]`,
+      );
+      if (!draggingEl) return;
+
+      const items = Array.from(list.children);
+      const draggingIdx = items.indexOf(draggingEl);
+      const targetIdx = items.indexOf(item);
+
+      if (draggingIdx < targetIdx) {
+        // 从前向后拖：插到 target 的后面
+        list.insertBefore(draggingEl, item.nextSibling);
+      } else {
+        // 从后向前拖：插到 target 之前
+        list.insertBefore(draggingEl, item);
+      }
+    });
 
     const main = document.createElement('button');
     main.type = 'button';

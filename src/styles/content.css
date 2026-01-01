@@ -95,6 +95,21 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   width: var(--bili-pin-item-width);
 }
 
+.bili-pin-bar__item[draggable="true"] {
+  cursor: grab;
+}
+
+.bili-pin-bar__item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.bili-pin-bar__item.is-ghost {
+  opacity: 0.3;
+  filter: grayscale(0.5);
+  transform: scale(0.95);
+  transition: all 0.2s ease;
+}
+
 .bili-pin-bar__itemMain {
   display: grid;
   grid-template-rows: var(--bili-pin-face-size) auto;
