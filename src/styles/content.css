@@ -10,7 +10,7 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   width: 100%;
   box-sizing: border-box;
   margin: 8px 0;
-  padding: 10px 12px;
+  padding: 10px 2px; /* 10px 12px -> 10px 2px, 总左padding为 2+4=6px */
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
@@ -30,6 +30,7 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
+  padding: 0 15px;
 }
 
 .bili-pin-bar__title {
@@ -70,9 +71,10 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 .bili-pin-bar__list {
   display: grid;
   grid-template-columns: repeat(auto-fill, var(--bili-pin-item-width));
-  gap: 14px;
+  gap: var(--bili-pin-gap, 10px); /* 14px -> 动态或10px */
   justify-content: start;
   overflow: hidden;
+  padding: 4px; /* 防止 box-shadow 被切 */
 }
 
 .bili-pin-bar__list.is-collapsed {

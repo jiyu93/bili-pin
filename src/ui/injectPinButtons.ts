@@ -65,7 +65,8 @@ function findUpItems(stripRoot: HTMLElement): HTMLElement[] {
 
 function syncPinBarSizingFromBili(stripRoot: HTMLElement, bar: HTMLElement): void {
   // 以推荐横条的一个样本 item 的实际渲染尺寸为准，避免“置顶栏更小/省略号放不下”等问题
-  const sample = findUpItems(stripRoot)[0] ?? null;
+  const items = findUpItems(stripRoot);
+  const sample = items[0] ?? null;
   if (!sample) return;
 
   // 注意：CSS 变量实际由 list 使用，因此要写到 list 上（否则可能被 list 上的默认值覆盖）
@@ -74,6 +75,18 @@ function syncPinBarSizingFromBili(stripRoot: HTMLElement, bar: HTMLElement): voi
   const itemRect = sample.getBoundingClientRect();
   if (itemRect.width > 10) {
     listEl.style.setProperty('--bili-pin-item-width', `${itemRect.width}px`);
+  }
+
+  // 尝试计算 gap
+  if (items.length >= 2) {
+    const r1 = items[0].getBoundingClientRect();
+    const r2 = items[1].getBoundingClientRect();
+    // 假设是左对齐或 flex 布局，第二个的 left 减去第一个的 right 即为间距
+    // 注意：如果有 margin，margin 也算在 rect 外部，所以 rect.right 到 rect.left 之间的空间就是视觉上的 gap
+    const gap = r2.left - r1.right;
+    if (gap > 0 && gap < 50) {
+      listEl.style.setProperty('--bili-pin-gap', `${gap}px`);
+    }
   }
 
   const faceEl =

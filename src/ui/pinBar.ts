@@ -269,6 +269,12 @@ export function renderPinBar(
     main.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+
+      // 如果是鼠标点击，则主动移除焦点，避免 :focus-within 导致 X 按钮常驻
+      if (e.detail > 0) {
+        main.blur();
+      }
+
       // 设置高亮
       setActiveUid(up.mid);
       handlers.onClickMid?.(up.mid);
