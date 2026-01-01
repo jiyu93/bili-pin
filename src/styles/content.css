@@ -2,6 +2,8 @@
 
 /* 置顶栏 */
 .bili-pin-bar {
+  width: 100%;
+  box-sizing: border-box;
   margin: 8px 0;
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.9);
@@ -9,18 +11,48 @@
   border-radius: 10px;
 }
 
+.bili-pin-bar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
 .bili-pin-bar__title {
   font-size: 12px;
   font-weight: 600;
   color: rgba(0, 0, 0, 0.75);
-  margin-bottom: 8px;
+  margin-bottom: 0;
+}
+
+.bili-pin-bar__toggle {
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.75);
+  cursor: pointer;
 }
 
 .bili-pin-bar__list {
+  --bili-pin-collapsed-max-height: 72px;
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  overflow: hidden;
+}
+
+.bili-pin-bar__list.is-collapsed {
+  /* 约等于：头像44px + 间距6px + 文本一行约16px */
+  max-height: var(--bili-pin-collapsed-max-height);
+}
+
+.bili-pin-bar__list.is-expanded {
+  max-height: none;
 }
 
 .bili-pin-bar__empty {
@@ -57,7 +89,7 @@
   white-space: nowrap;
 }
 
-/* 原头像条上的“置顶/已置顶”按钮 */
+/* 关注UP推荐列表上的“置顶/已置顶”按钮 */
 .bili-pin-btn {
   position: absolute;
   top: 2px;
@@ -71,11 +103,29 @@
   background: rgba(255, 255, 255, 0.9);
   color: rgba(0, 0, 0, 0.75);
   cursor: pointer;
+
+  /* 默认隐藏：hover 时再显示 */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 0ms linear 120ms;
 }
 
 .bili-pin-btn.is-pinned {
-  border-color: rgba(0, 160, 255, 0.4);
-  color: rgba(0, 120, 200, 0.95);
+  border-color: rgba(0, 160, 255, 0.95);
+  background: rgba(0, 160, 255, 0.95);
+  color: #fff;
+}
+
+/* hover/聚焦时显示按钮 */
+.bili-dyn-up-list__item:hover .bili-pin-btn,
+.bili-dyn-up-list__item:focus-within .bili-pin-btn {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 0ms;
 }
 
 

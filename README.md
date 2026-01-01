@@ -40,6 +40,11 @@ npm run build
 3. 打开右上角 **开发者模式**
 4. 点击 **加载已解压的扩展程序**，选择本项目生成的 `.output/chrome-mv3` 目录
 
+## 需求与规划
+
+- **PRD（主需求文档）**：[`plans/prd.md`](plans/prd.md)
+- **Roadmap（版本规划）**：[`plans/roadmap.md`](plans/roadmap.md)
+
 ## 说明
 
 - 置顶数据会存到本地 `chrome.storage.local`（不会上传到任何服务器）

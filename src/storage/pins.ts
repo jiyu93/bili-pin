@@ -1,3 +1,5 @@
+import { makeFaceKey, normalizeUid } from '../bili/faceKey';
+
 export type PinnedUp = {
   uid: string;
   name?: string;
@@ -6,6 +8,23 @@ export type PinnedUp = {
 };
 
 const STORAGE_KEY = 'biliPin.pins.v1';
+
+function normalizeItem(item: PinnedUp): PinnedUp | null {
+  const face = String(item.face ?? '').trim() || undefined;
+
+  // 尽量把历史 numeric uid 迁移到 faceKey（因为动态页关注UP推荐列表不一定暴露真实uid）
+  const faceKey = makeFaceKey(face);
+  const baseUid = String(item.uid ?? '').trim();
+  const uid = normalizeUid(faceKey ?? baseUid, face);
+
+  if (!uid) return null;
+  return {
+    uid,
+    name: item.name,
+    face,
+    pinnedAt: Number(item.pinnedAt ?? 0) || Date.now(),
+  };
+}
 
 function uniqByUid(list: PinnedUp[]): PinnedUp[] {
   const map = new Map<string, PinnedUp>();
@@ -58,21 +77,37 @@ async function storageSet<T>(key: string, value: T): Promise<void> {
 
 export async function getPinnedUps(): Promise<PinnedUp[]> {
   const list = await storageGet<PinnedUp[]>(STORAGE_KEY, []);
-  return sortPinned(uniqByUid(Array.isArray(list) ? list : []));
+  const raw = Array.isArray(list) ? list : [];
+  const normalized = raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[];
+  const next = sortPinned(uniqByUid(normalized));
+
+  // 如果发生了迁移/去重，写回一次，清理“脏数据”
+  const beforeKey = JSON.stringify(
+    raw.map((x) => [String(x.uid ?? '').trim(), String(x.face ?? '').trim()]),
+  );
+  const afterKey = JSON.stringify(next.map((x) => [x.uid, String(x.face ?? '').trim()]));
+  if (beforeKey !== afterKey) {
+    await storageSet(STORAGE_KEY, next);
+  }
+
+  return next;
 }
 
 export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
-  await storageSet(STORAGE_KEY, sortPinned(uniqByUid(Array.isArray(list) ? list : [])));
+  const raw = Array.isArray(list) ? list : [];
+  const normalized = raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[];
+  await storageSet(STORAGE_KEY, sortPinned(uniqByUid(normalized)));
 }
 
 export async function isPinned(uid: string): Promise<boolean> {
   const list = await getPinnedUps();
-  const target = String(uid ?? '').trim();
+  const target = normalizeUid(String(uid ?? ''), undefined);
   return list.some((x) => x.uid === target);
 }
 
 export async function pinUp(input: Omit<PinnedUp, 'pinnedAt'> & { pinnedAt?: number }): Promise<PinnedUp[]> {
-  const uid = String(input.uid ?? '').trim();
+  const face = String(input.face ?? '').trim() || undefined;
+  const uid = normalizeUid(String(input.uid ?? ''), face) || makeFaceKey(face) || String(input.uid ?? '').trim();
   if (!uid) return await getPinnedUps();
 
   const list = await getPinnedUps();
@@ -80,7 +115,7 @@ export async function pinUp(input: Omit<PinnedUp, 'pinnedAt'> & { pinnedAt?: num
   const next: PinnedUp = {
     uid,
     name: input.name ?? existing?.name,
-    face: input.face ?? existing?.face,
+    face: face ?? existing?.face,
     pinnedAt: input.pinnedAt ?? existing?.pinnedAt ?? Date.now(),
   };
 
@@ -90,9 +125,16 @@ export async function pinUp(input: Omit<PinnedUp, 'pinnedAt'> & { pinnedAt?: num
 }
 
 export async function unpinUp(uid: string): Promise<PinnedUp[]> {
-  const target = String(uid ?? '').trim();
+  const target = normalizeUid(String(uid ?? ''), undefined);
   const list = await getPinnedUps();
-  const next = list.filter((x) => x.uid !== target);
+
+  // 兼容：如果 target 是 faceKey，则同时清掉历史遗留的同一 face 的不同 uid 记录
+  let next = list.filter((x) => x.uid !== target);
+  if (target.startsWith('face:')) {
+    const hash = target.slice('face:'.length);
+    next = next.filter((x) => makeFaceKey(x.face) !== `face:${hash}`);
+  }
+
   await setPinnedUps(next);
   return next;
 }
