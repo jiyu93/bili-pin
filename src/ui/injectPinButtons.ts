@@ -23,7 +23,7 @@ function extractNameAndFaceFromItem(item: HTMLElement): Pick<PinnedUp, 'name' | 
   return { name, face };
 }
 
-function getItemUid(item: HTMLElement): string | null {
+function getItemMid(item: HTMLElement): string | null {
   // 只从 portal 缓存映射 mid：页面打开时 portal(up_list) 已返回 mid/name/face
   const img = item.querySelector<HTMLImageElement>('img');
   if (img) {
@@ -60,7 +60,7 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
   const items = findUpItems(stripRoot);
 
   for (const item of items) {
-    let uid = getItemUid(item);
+    let mid = getItemMid(item);
     
     const host = item;
 
@@ -68,13 +68,13 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
     if (host.getAttribute(HOST_MARK) === '1') {
       const existed = host.querySelector<HTMLButtonElement>(`button[${BTN_MARK}="1"]`);
       if (existed) {
-        // 如果之前没有uid，现在尝试重新获取
-        if (!uid) {
-          uid = getItemUid(item);
+        // 如果之前没有 mid，现在尝试重新获取
+        if (!mid) {
+          mid = getItemMid(item);
         }
-        if (uid) {
-          existed.dataset.uid = uid;
-          setBtnState(existed, pinnedSet.has(uid));
+        if (mid) {
+          existed.dataset.mid = mid;
+          setBtnState(existed, pinnedSet.has(mid));
         }
       }
       continue;
@@ -88,13 +88,13 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
     btn.className = BTN_CLASS;
     btn.setAttribute(BTN_MARK, '1');
     
-    // 即使暂时获取不到uid，也创建按钮（但会禁用）
-    if (uid) {
-      btn.dataset.uid = uid;
-      setBtnState(btn, pinnedSet.has(uid));
+    // 即使暂时获取不到 mid，也创建按钮（但会禁用）
+    if (mid) {
+      btn.dataset.mid = mid;
+      setBtnState(btn, pinnedSet.has(mid));
     } else {
-      // 暂时没有uid，创建按钮但禁用，并标记需要重试
-      btn.dataset.uid = '';
+      // 暂时没有 mid，创建按钮但禁用，并标记需要重试
+      btn.dataset.mid = '';
       btn.dataset.retry = '1';
       btn.disabled = true;
       btn.textContent = '置顶';
@@ -106,16 +106,16 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
       e.preventDefault();
       e.stopPropagation();
 
-      // 如果按钮被禁用，先尝试重新获取uid
-      if (btn.disabled || !uid) {
-        uid = getItemUid(item);
-        if (uid && /^\d+$/.test(uid)) {
-          btn.dataset.uid = uid;
+      // 如果按钮被禁用，先尝试重新获取 mid
+      if (btn.disabled || !mid) {
+        mid = getItemMid(item);
+        if (mid && /^\d+$/.test(mid)) {
+          btn.dataset.mid = mid;
           btn.disabled = false;
           btn.style.opacity = '';
           btn.title = '';
           btn.removeAttribute('data-retry');
-          setBtnState(btn, pinnedSet.has(uid));
+          setBtnState(btn, pinnedSet.has(mid));
         } else {
           showToast('正在获取UP信息，请稍候再试');
           return;
@@ -124,18 +124,18 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
 
       const currentlyPinned = btn.dataset.pinned === '1';
       if (currentlyPinned) {
-        await unpinUp(uid);
+        await unpinUp(mid);
       } else {
-        // 再次检查uid是否有效
-        if (!uid || !/^\d+$/.test(uid)) {
+        // 再次检查 mid 是否有效
+        if (!mid || !/^\d+$/.test(mid)) {
           showToast('无法置顶：未获取到真实的UP ID。请等待页面加载完成后再试。');
-          console.warn('[bili-pin] cannot pin: no real mid', { uid });
+          console.warn('[bili-pin] cannot pin: no real mid', { mid });
           return;
         }
         
         try {
           const meta = extractNameAndFaceFromItem(item);
-          await pinUp({ uid, ...meta });
+          await pinUp({ mid, ...meta } as any);
         } catch (error: any) {
           showToast(error.message || '置顶失败，请重试');
           console.error('[bili-pin] pin failed', error);
@@ -149,17 +149,17 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
 
     host.appendChild(btn);
 
-    // 如果暂时没有uid，延迟重试获取
-    if (!uid) {
+    // 如果暂时没有 mid，延迟重试获取
+    if (!mid) {
       setTimeout(() => {
-        const retryUid = getItemUid(item);
-        if (retryUid && /^\d+$/.test(retryUid)) {
-          btn.dataset.uid = retryUid;
+        const retryMid = getItemMid(item);
+        if (retryMid && /^\d+$/.test(retryMid)) {
+          btn.dataset.mid = retryMid;
           btn.disabled = false;
           btn.style.opacity = '';
           btn.title = '';
           btn.removeAttribute('data-retry');
-          setBtnState(btn, pinnedSet.has(retryUid));
+          setBtnState(btn, pinnedSet.has(retryMid));
         }
       }, 1000); // 1秒后重试
     }
@@ -176,34 +176,34 @@ function observeRecommendationListSelection(stripRoot: HTMLElement): void {
     const item = target.closest<HTMLElement>('.bili-dyn-up-list__item');
     if (!item) return;
 
-    const uid = getItemUid(item);
-    if (!uid) return;
+    const mid = getItemMid(item);
+    if (!mid) return;
     getPinnedUps().then((pinned) => {
-      const isPinned = pinned.some((p) => p.uid === uid);
-      if (isPinned) setActiveUid(uid);
+      const isPinned = pinned.some((p) => p.mid === mid);
+      if (isPinned) setActiveUid(mid);
     });
   });
 }
 
 async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
   const pinned = await getPinnedUps();
-  const pinnedSet = new Set(pinned.map((x) => x.uid));
+  const pinnedSet = new Set(pinned.map((x) => x.mid));
 
   const bar = ensurePinBar(stripRoot);
   await ensurePinBarPrefs(bar);
   renderPinBar(bar, pinned, {
-    onClickUid: async (uid) => {
+    onClickMid: async (mid) => {
       // 设置高亮（在点击时立即显示反馈）
-      setActiveUid(uid);
+      setActiveUid(mid);
       
       // 直接在动态页内切换（不再打开空间页/不再桥接 DOM 点击）
-      const pinnedUp = pinned.find((p) => p.uid === uid);
-      const ok = await filterFeedDirectly(stripRoot, uid, pinnedUp?.name, pinnedUp?.face);
+      const pinnedUp = pinned.find((p) => p.mid === mid);
+      const ok = await filterFeedDirectly(stripRoot, mid, pinnedUp?.name, pinnedUp?.face);
       if (!ok) showToast('切换失败：暂时无法在动态页内刷新该UP的Feed，请稍后重试');
     },
-    onUnpinUid: async (uid) => {
+    onUnpinMid: async (mid) => {
       try {
-        await unpinUp(uid);
+        await unpinUp(mid);
         await refreshPinUi(stripRoot);
       } catch (err) {
         console.warn('[bili-pin] unpin failed', err);

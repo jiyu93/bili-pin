@@ -8,12 +8,12 @@ export const PIN_BAR_COUNT_ID = 'bili-pin-pinbar-count';
 const PIN_BAR_EXPANDED_KEY = 'biliPin.ui.pinBarExpanded.v1';
 
 export type PinBarHandlers = {
-  onClickUid?: (uid: string) => void;
-  onUnpinUid?: (uid: string) => void;
+  onClickMid?: (mid: string) => void;
+  onUnpinMid?: (mid: string) => void;
 };
 
-// 当前选中的UP uid（用于高亮显示）
-let currentActiveUid: string | null = null;
+// 当前选中的UP mid（用于高亮显示）
+let currentActiveMid: string | null = null;
 
 async function storageGetBool(key: string, fallback: boolean): Promise<boolean> {
   const chromeStorage = (globalThis as any).chrome?.storage?.local;
@@ -165,7 +165,7 @@ function updatePinBarCollapse(bar: HTMLElement): void {
  * 设置当前激活的UP（用于高亮显示）
  */
 export function setActiveUid(uid: string | null): void {
-  currentActiveUid = uid;
+  currentActiveMid = uid;
   updateActiveHighlight();
 }
 
@@ -181,8 +181,8 @@ function updateActiveHighlight(): void {
 
   const items = Array.from(list.querySelectorAll<HTMLElement>('.bili-pin-bar__item'));
   for (const item of items) {
-    const itemUid = item.dataset.uid;
-    if (itemUid === currentActiveUid) {
+    const itemMid = item.dataset.mid;
+    if (itemMid === currentActiveMid) {
       item.classList.add('is-active');
     } else {
       item.classList.remove('is-active');
@@ -212,7 +212,7 @@ export function renderPinBar(
   for (const up of pinned) {
     const item = document.createElement('div');
     item.className = 'bili-pin-bar__item';
-    item.dataset.uid = up.uid;
+    item.dataset.mid = up.mid;
 
     const main = document.createElement('button');
     main.type = 'button';
@@ -220,12 +220,12 @@ export function renderPinBar(
 
     const img = document.createElement('img');
     img.className = 'bili-pin-bar__face';
-    img.alt = up.name ?? up.uid;
+    img.alt = up.name ?? up.mid;
     if (up.face) img.src = up.face;
 
     const name = document.createElement('div');
     name.className = 'bili-pin-bar__name';
-    name.textContent = up.name ?? up.uid;
+    name.textContent = up.name ?? up.mid;
 
     main.appendChild(img);
     main.appendChild(name);
@@ -234,8 +234,8 @@ export function renderPinBar(
       e.preventDefault();
       e.stopPropagation();
       // 设置高亮
-      setActiveUid(up.uid);
-      handlers.onClickUid?.(up.uid);
+      setActiveUid(up.mid);
+      handlers.onClickMid?.(up.mid);
     });
 
     const unpin = document.createElement('button');
@@ -245,7 +245,7 @@ export function renderPinBar(
     unpin.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      handlers.onUnpinUid?.(up.uid);
+      handlers.onUnpinMid?.(up.mid);
     });
 
     item.appendChild(main);

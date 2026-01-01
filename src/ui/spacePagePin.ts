@@ -211,7 +211,7 @@ async function injectPinButton(): Promise<void> {
         } else {
           // 置顶
           await pinUp({
-            uid: mid,
+            mid,
             name: name || undefined,
             face: face || undefined,
           });
