@@ -3,6 +3,7 @@ import { getPinnedUps, pinUp, setPinnedUps, unpinUp, type PinnedUp } from '../st
 import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveUid } from './pinBar';
 import { showToast } from './toast';
 import { getDesiredHostMid, getUpInfoByFace, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
+import { forceReloadAllFeed } from '../bili/feedSwitch';
 
 const BTN_CLASS = 'bili-pin-btn';
 const BTN_MARK = 'data-bili-pin-btn';
@@ -247,9 +248,28 @@ function observeRecommendationListSelection(stripRoot: HTMLElement): void {
     const item = target.closest<HTMLElement>('.bili-dyn-up-list__item');
     if (!item) return;
 
+    // 检查是否处于劫持状态（之前通过置顶切到了某个不在推荐栏的UP，并强制高亮了"全部动态"）
+    if (getDesiredHostMid()) {
+      // 无论如何，用户点击了推荐栏，先清除劫持状态
+      setDesiredHostMid(null);
+
+      // 检查是否命中Bug场景：用户点击了“看似 active 但实际上被劫持”的“全部动态”
+      const isAll = !!item.querySelector('.bili-dyn-up-list__item__face.all');
+      const isActive = item.classList.contains('active');
+      
+      if (isAll && isActive) {
+        // 此时 B 站因为 active 状态而忽略点击，我们需要手动强制刷新
+        e.preventDefault();
+        e.stopPropagation();
+        
+        forceReloadAllFeed(stripRoot);
+        // 清空置顶栏高亮
+        setActiveUid(null);
+        return;
+      }
+    }
+
     const mid = getItemMid(item);
-    // 用户在推荐条里做了任何切换意图：都应退出“置顶筛选模式”
-    if (getDesiredHostMid()) setDesiredHostMid(null);
 
     if (!mid) {
       // 点击了“全部动态”之类拿不到 mid 的入口：清空置顶栏高亮
@@ -387,5 +407,3 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
 export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
   await refreshPinUi(stripRoot);
 }
-
-

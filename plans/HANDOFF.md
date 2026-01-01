@@ -4,7 +4,9 @@
 
 ## TL;DR（现状）
 - **动态页** `https://t.bilibili.com/*`：有“置顶动态”栏 + 推荐横条每个头像右上角有图钉按钮（可置顶/取消）
-- **置顶动态点击后可切 Feed**：即使该 UP 不在当前推荐横条里也能切
+- **置顶动态点击后可切 Feed**：
+  - 若该 UP 在推荐横条存在：直接点击该 UP（B 站原生高亮 + 发请求）
+  - 若该 UP 不在推荐横条：高亮“全部动态”（拦截请求改为目标 UP）
 - **支持拖拽排序**：长按置顶栏头像可拖拽调整顺序，数据实时保存
 - **选中高亮**：置顶栏选中态为蓝色圆环 + 蓝色文字（用 `box-shadow`，不抖动）
 - **图标**：图钉（Tabler outline/filled 两态），取消（Tabler x）
@@ -19,9 +21,10 @@
 - **存储一致性**：pins 必须落在扩展 `chrome.storage.local`，不能用页面 localStorage（子域不共享，会导致 space 页置顶后动态页看不到）
 - **mid 获取**：从 `portal` 接口响应拿 `mid/name/face`，不可靠的 DOM 解析一律回避
 - **切换 feed**：
-  - 设置 `desiredHostMid`
-  - 触发一次会让 B 站发起 `feed/*` 请求的点击
-  - 在 `apiInterceptor` 中改写 `/x/polymer/web-dynamic/v1/feed/*` 的 `host_mid`
+  - `src/bili/feedSwitch.ts` 负责策略：
+    1. 优先在 DOM 找目标 UP（通过注入的 `data-mid` 或头像反查），找到则直接点击（原生行为）。
+    2. 找不到则设置 `desiredHostMid`，然后点击“全部动态”制造请求，`apiInterceptor` 会拦截并修改 `host_mid`。
+    3. 若“全部动态”已激活，则通过“先点别的 -> 再点全部”强行触发刷新。
 
 ## 关键流程（按调用链理解）
 1. `entrypoints/content.ts`
@@ -53,10 +56,12 @@
    - 渲染置顶栏：`renderPinBar(...)`
    - **昵称/头像纠错**：渲染前按 `mid` 用 portal 缓存回填 `name/face` 并写回 pins（修复 space 页曾误取签名/头像的历史脏数据）
    - 退出筛选态：用户点击推荐横条/tabs（capture + `e.isTrusted`）时清空 `desiredHostMid`
+   - **特殊处理（Bug修复）**：当用户点击推荐栏中处于 active 状态的“全部动态”时，若此前处于“置顶劫持状态”（UI 欺骗），则通过 `forceReloadAllFeed` 强制触发一次“切换再切回”的动作，以确保 B 站真正加载全部动态内容。
 
 6. `src/bili/feedSwitch.ts` & `src/bili/clickBridge.ts`
    - `clickBridge.filterFeedDirectly()` 仅调用 `switchFeedInDynamicPage()`
-   - `feedSwitch` 为了“每次都触发请求”：优先点击一个**非 active** 的推荐 UP item，并轮换 index；必要时用其它兜底点击
+   - `switchFeedInDynamicPage`：智能选择点击对象（目标 UP 或 "全部动态"），兼顾 UI 高亮同步。
+   - `forceReloadAllFeed`：专门用于“恢复全部动态流”的工具函数，解决 B 站前端忽略 active item 点击的问题。
 
 7. `entrypoints/video.content.ts` & `src/ui/videoFollowMenuPin.ts`
    - `runAt: document_idle` + `world: 'ISOLATED'`
@@ -95,8 +100,11 @@
 
 ## 验收清单（每次改完都跑一遍）
 - 刷新动态页后：置顶栏与图钉按钮可见且不重复注入
-- 点击置顶栏任意 UP：Feed 切换成功（UP 不在推荐横条也可）
+- 点击置顶栏任意 UP：Feed 切换成功
+  - 若 UP 在推荐栏：推荐栏对应头像高亮
+  - 若 UP 不在推荐栏：推荐栏“全部动态”高亮（内容为该 UP）
 - 置顶筛选态：tabs 隐藏；点推荐横条/tabs 后退出筛选态
+  - **特别测试**：置顶劫持状态下点击“全部动态”，应能正常恢复到全部动态流，且置顶高亮清除。
 - 连续切换置顶栏多个 UP：每次都触发切换，不出现“第二次没反应”
 - 打开任意 UP 个人空间主页：hover 右上角“已关注”→ 菜单里出现“置顶动态/取消置顶”（优先位于“设置分组”上方）；点击可写入/移除置顶数据（刷新动态页可见同步）
 - space 页置顶后：动态页置顶栏昵称/头像显示正确（不是签名；头像不丢失）
@@ -105,11 +113,9 @@
 - 拖拽排序：在置顶栏拖动 UP 头像可交换位置（有平滑动画）；刷新页面后顺序保持不变
 
 ## 待办（优先级从高到低）
-- （可选）点击置顶栏后同步高亮推荐横条对应 UP（如存在）
 - 关注列表按关注时间筛选（见 `plans/prd.md`）
 
 ## 协作约定（对人类 & AI）
 - **每次完成一个“可验收”的改动后，必须同步更新本文件（HANDOFF）**：
   - 写清：改动点、涉及文件、如何验证
   - 若替换了实现方式：删掉旧描述，避免“文档比代码更像历史记录”
-
