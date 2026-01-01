@@ -105,20 +105,35 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   top: 2px;
   right: 2px;
   z-index: 2;
-  font-size: 11px;
-  line-height: 1;
-  padding: 4px 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   border-radius: 999px;
-  border: 1px solid rgba(0, 160, 255, 0.95);
-  background: rgba(0, 160, 255, 0.95);
-  color: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.75);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
   /* 默认隐藏：hover 置顶头像时才显示，方便取消置顶 */
   opacity: 0;
   pointer-events: none;
   transform: translateY(-2px);
   transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.bili-pin-bar__unpinIcon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.bili-pin-bar__unpin:hover,
+.bili-pin-bar__unpin:focus-visible {
+  border-color: rgba(0, 160, 255, 0.75);
+  box-shadow: 0 0 0 2px rgba(0, 161, 214, 0.15);
 }
 
 .bili-pin-bar__item:hover .bili-pin-bar__unpin,
@@ -167,14 +182,17 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   top: 2px;
   right: 2px;
   z-index: 10;
-  font-size: 11px;
-  line-height: 1;
-  padding: 4px 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.15);
   background: rgba(255, 255, 255, 0.9);
   color: rgba(0, 0, 0, 0.75);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
   /* 默认隐藏：hover 时再显示 */
   opacity: 0;
@@ -185,9 +203,32 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 }
 
 .bili-pin-btn.is-pinned {
+  /* 仅改变图标（stroke）颜色，不要蓝底 */
   border-color: rgba(0, 160, 255, 0.95);
-  background: rgba(0, 160, 255, 0.95);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 160, 255, 0.95);
+}
+
+.bili-pin-btn:disabled {
+  cursor: default;
+}
+
+.bili-pin-btn__svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.bili-pin-btn__svg--filled {
+  display: none;
+}
+
+.bili-pin-btn.is-pinned .bili-pin-btn__svg--outline {
+  display: none;
+}
+
+.bili-pin-btn.is-pinned .bili-pin-btn__svg--filled {
+  display: block;
 }
 
 /* hover/聚焦时显示按钮 */

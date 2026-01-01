@@ -8,6 +8,23 @@ const BTN_CLASS = 'bili-pin-btn';
 const BTN_MARK = 'data-bili-pin-btn';
 const HOST_MARK = 'data-bili-pin-host';
 
+function ensurePinBtnContent(btn: HTMLButtonElement) {
+  // 用 inline SVG：无需额外图片资源，颜色可由 CSS 控制
+  if (btn.querySelector('.bili-pin-btn__svg')) return;
+  btn.innerHTML = `
+    <svg class="bili-pin-btn__svg bili-pin-btn__svg--outline" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+      <path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M9 15l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M14.5 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <svg class="bili-pin-btn__svg bili-pin-btn__svg--filled" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+      <path d="M15.113 3.21l.094 .083l5.5 5.5a1 1 0 0 1 -1.175 1.59l-3.172 3.171l-1.424 3.797a1 1 0 0 1 -.158 .277l-.07 .08l-1.5 1.5a1 1 0 0 1 -1.32 .082l-.095 -.083l-2.793 -2.792l-3.793 3.792a1 1 0 0 1 -1.497 -1.32l.083 -.094l3.792 -3.793l-2.792 -2.793a1 1 0 0 1 -.083 -1.32l.083 -.094l1.5 -1.5a1 1 0 0 1 .258 -.187l.098 -.042l3.796 -1.425l3.171 -3.17a1 1 0 0 1 1.497 -1.26z" fill="currentColor"/>
+    </svg>
+  `.trim();
+}
+
 function extractNameAndFace(a: HTMLAnchorElement): Pick<PinnedUp, 'name' | 'face'> {
   const img = a.querySelector<HTMLImageElement>('img');
   const face = img?.currentSrc || img?.src || undefined;
@@ -51,7 +68,9 @@ function ensureHostPositioning(host: HTMLElement) {
 }
 
 function setBtnState(btn: HTMLButtonElement, pinned: boolean) {
-  btn.textContent = pinned ? '已置顶' : '置顶';
+  ensurePinBtnContent(btn);
+  btn.setAttribute('aria-label', pinned ? '取消置顶' : '置顶');
+  btn.title = pinned ? '取消置顶' : '置顶';
   btn.dataset.pinned = pinned ? '1' : '0';
   btn.classList.toggle('is-pinned', pinned);
 }
@@ -97,7 +116,8 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
       btn.dataset.mid = '';
       btn.dataset.retry = '1';
       btn.disabled = true;
-      btn.textContent = '置顶';
+      ensurePinBtnContent(btn);
+      btn.setAttribute('aria-label', '置顶（正在加载）');
       btn.title = '正在获取UP信息，请稍候...';
       btn.style.opacity = '0.5';
     }
