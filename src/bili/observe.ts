@@ -31,14 +31,11 @@ export function observeUpAvatarStrip(handler: UpStripFoundHandler): () => void {
       return;
     }
 
-    // 只在首次找到或节点变更时触发；后续注入逻辑会更稳。
-    if (el !== lastEl) {
-      lastEl = el;
-      handler(el);
-    } else {
-      // DOM 可能被重新渲染但复用了同一根节点，允许外部按需二次校验
-      handler(el);
-    }
+    // 只在首次找到或“根节点变更”时触发注入。
+    // 否则在 hover/tooltip 等频繁 DOM 变化时会反复重渲染，造成按钮闪烁。
+    if (el === lastEl) return;
+    lastEl = el;
+    handler(el);
   };
 
   const schedule = () => {

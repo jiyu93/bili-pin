@@ -9,10 +9,11 @@ const PIN_BAR_EXPANDED_KEY = 'biliPin.ui.pinBarExpanded.v1';
 
 export type PinBarHandlers = {
   onClickUid?: (uid: string) => void;
+  onUnpinUid?: (uid: string) => void;
 };
 
 async function storageGetBool(key: string, fallback: boolean): Promise<boolean> {
-  const chromeStorage = globalThis.chrome?.storage?.local;
+  const chromeStorage = (globalThis as any).chrome?.storage?.local;
   if (chromeStorage?.get) {
     return await new Promise<boolean>((resolve) => {
       chromeStorage.get({ [key]: fallback }, (result: Record<string, unknown>) => {
@@ -30,7 +31,7 @@ async function storageGetBool(key: string, fallback: boolean): Promise<boolean> 
 }
 
 async function storageSetBool(key: string, value: boolean): Promise<void> {
-  const chromeStorage = globalThis.chrome?.storage?.local;
+  const chromeStorage = (globalThis as any).chrome?.storage?.local;
   if (chromeStorage?.set) {
     await new Promise<void>((resolve) => {
       chromeStorage.set({ [key]: value }, () => resolve());
@@ -177,10 +178,13 @@ export function renderPinBar(
   }
 
   for (const up of pinned) {
-    const item = document.createElement('button');
-    item.type = 'button';
+    const item = document.createElement('div');
     item.className = 'bili-pin-bar__item';
     item.dataset.uid = up.uid;
+
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'bili-pin-bar__itemMain';
 
     const img = document.createElement('img');
     img.className = 'bili-pin-bar__face';
@@ -191,15 +195,27 @@ export function renderPinBar(
     name.className = 'bili-pin-bar__name';
     name.textContent = up.name ?? up.uid;
 
-    item.appendChild(img);
-    item.appendChild(name);
+    main.appendChild(img);
+    main.appendChild(name);
 
-    item.addEventListener('click', (e) => {
+    main.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       handlers.onClickUid?.(up.uid);
     });
 
+    const unpin = document.createElement('button');
+    unpin.type = 'button';
+    unpin.className = 'bili-pin-bar__unpin';
+    unpin.textContent = '取消置顶';
+    unpin.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handlers.onUnpinUid?.(up.uid);
+    });
+
+    item.appendChild(main);
+    item.appendChild(unpin);
     list.appendChild(item);
   }
 

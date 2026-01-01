@@ -90,23 +90,14 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
       }
 
       // 同步UI（按钮 + 置顶栏）
-      const latest = await getPinnedUps();
-      const nextSet = new Set(latest.map((x) => x.uid));
-      setBtnState(btn, nextSet.has(uid));
-      const bar = ensurePinBar(stripRoot);
-      renderPinBar(bar, latest, {
-        onClickUid: (uid2) => {
-          const ok = clickUidInStrip(stripRoot, uid2);
-          if (!ok) console.debug('[bili-pin] failed to bridge click', { uid: uid2 });
-        },
-      });
+      await refreshPinUi(stripRoot);
     });
 
     host.appendChild(btn);
   }
 }
 
-export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
+async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
   const pinned = await getPinnedUps();
   const pinnedSet = new Set(pinned.map((x) => x.uid));
 
@@ -117,9 +108,21 @@ export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
       const ok = clickUidInStrip(stripRoot, uid);
       if (!ok) console.debug('[bili-pin] failed to bridge click', { uid });
     },
+    onUnpinUid: async (uid) => {
+      try {
+        await unpinUp(uid);
+        await refreshPinUi(stripRoot);
+      } catch (err) {
+        console.warn('[bili-pin] unpin failed', err);
+      }
+    },
   });
 
   renderButtons(stripRoot, pinnedSet);
+}
+
+export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
+  await refreshPinUi(stripRoot);
 }
 
 
