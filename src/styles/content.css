@@ -93,22 +93,31 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 .bili-pin-bar__item {
   position: relative;
   width: var(--bili-pin-item-width);
-}
-
-.bili-pin-bar__item[draggable="true"] {
+  /* 允许拖拽的手型 */
   cursor: grab;
+  /* 防止拖拽时选中文字 */
+  user-select: none; 
 }
 
-.bili-pin-bar__item[draggable="true"]:active {
+.bili-pin-bar__item:active {
   cursor: grabbing;
 }
 
-.bili-pin-bar__item.is-ghost {
-  opacity: 0.3;
-  filter: grayscale(0.5);
-  transform: scale(0.95);
-  transition: all 0.2s ease;
+/* SortableJS ghost: 拖拽过程中的占位符（目标位置） */
+.bili-pin-ghost {
+  opacity: 0.4;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
 }
+
+/* 隐藏 ghost 内部的内容，只留一个框，或者让它半透明 */
+.bili-pin-ghost .bili-pin-bar__itemMain,
+.bili-pin-ghost .bili-pin-bar__faceWrap {
+  opacity: 0.2;
+  filter: grayscale(1);
+}
+
+/* 可选：隐藏原生拖拽时的默认高亮（如果在某些浏览器有的话） */
 
 .bili-pin-bar__itemMain {
   display: grid;

@@ -15,5 +15,9 @@
   "type": "module",
   "devDependencies": {
     "wxt": "^0.20.13"
+  },
+  "dependencies": {
+    "@types/sortablejs": "^1.15.9",
+    "sortablejs": "^1.15.6"
   }
 }
