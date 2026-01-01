@@ -21,18 +21,30 @@ function getUpNameFromTitle(): string | undefined {
   return undefined;
 }
 
+function getUpNameFromOgTitle(): string | undefined {
+  const raw = document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.content?.trim() || '';
+  if (!raw) return undefined;
+  const idx = raw.indexOf('的个人空间');
+  if (idx > 0) return raw.slice(0, idx).trim() || undefined;
+  // 兜底：部分页面可能没有“的个人空间”后缀
+  return raw || undefined;
+}
+
 function getUpMeta(): { name?: string; face?: string } {
+  // 注意：space 页有“签名/简介”区域也可能带 title 属性，不能用过宽的 `[title]` 去抓，否则容易把签名当昵称。
   const name =
     document.querySelector<HTMLElement>('.upinfo-detail__top .name')?.textContent?.trim() ||
-    document.querySelector<HTMLElement>('.upinfo-detail__top [title]')?.getAttribute('title')?.trim() ||
-    document.querySelector<HTMLElement>('.header-upinfo [title]')?.getAttribute('title')?.trim() ||
+    document.querySelector<HTMLElement>('.h-name')?.textContent?.trim() ||
+    getUpNameFromOgTitle() ||
     getUpNameFromTitle();
 
+  // 头像优先取页面“真实头像 img”，og:image 仅作为兜底（有些页面 og:image 不是头像）。
   const face =
     document.querySelector<HTMLImageElement>('.bili-avatar-img.bili-avatar-face')?.currentSrc ||
     document.querySelector<HTMLImageElement>('.bili-avatar-img.bili-avatar-face')?.src ||
     document.querySelector<HTMLImageElement>('.b-avatar img')?.currentSrc ||
     document.querySelector<HTMLImageElement>('.b-avatar img')?.src ||
+    document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.content?.trim() ||
     undefined;
 
   return { name: name || undefined, face: face || undefined };

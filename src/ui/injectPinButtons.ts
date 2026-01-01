@@ -1,8 +1,8 @@
 import { filterFeedDirectly } from '../bili/clickBridge';
-import { getPinnedUps, pinUp, unpinUp, type PinnedUp } from '../storage/pins';
+import { getPinnedUps, pinUp, setPinnedUps, unpinUp, type PinnedUp } from '../storage/pins';
 import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveUid } from './pinBar';
 import { showToast } from './toast';
-import { getDesiredHostMid, getUpInfoByFace, setDesiredHostMid } from '../bili/apiInterceptor';
+import { getDesiredHostMid, getUpInfoByFace, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
 
 const BTN_CLASS = 'bili-pin-btn';
 const BTN_MARK = 'data-bili-pin-btn';
@@ -291,18 +291,47 @@ function installGlobalExitFilterListenersOnce(): void {
 
 async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
   const pinned = await getPinnedUps();
-  const pinnedSet = new Set(pinned.map((x) => x.mid));
+
+  // 回填/修正昵称与头像：space 页置顶时可能缺 portal 缓存（或曾经抓错 DOM），导致 name/face 不准。
+  // 动态页 portal 有可靠的 {mid,name,face}，因此优先用它修正并写回 storage（一次性纠正历史脏数据）。
+  let needWriteBack = false;
+  const enriched = pinned.map((p) => {
+    const info = getUpInfoByMid(p.mid);
+    if (!info) return p;
+    const name = (info.name || '').trim() || undefined;
+    const face = (info.face || '').trim() || undefined;
+
+    // face 的合并策略要更保守：只有在“原本没有 face 或明显不是头像 URL”时才覆盖，避免引入回归。
+    const currentFace = (p.face || '').trim() || undefined;
+    const isLikelyFaceUrl = (u?: string) => !!u && /\/bfs\/face\//.test(u);
+
+    const next: PinnedUp = {
+      ...p,
+      // 昵称以 portal 为准（更可靠）
+      name: name ?? p.name,
+      // 头像只在必要时回填
+      face: currentFace ? currentFace : (isLikelyFaceUrl(face) ? face : undefined) ?? p.face,
+    };
+    if (next.name !== p.name || next.face !== p.face) needWriteBack = true;
+    return next;
+  });
+  if (needWriteBack) {
+    await setPinnedUps(enriched);
+  }
+
+  const pinnedForRender = needWriteBack ? enriched : pinned;
+  const pinnedSet = new Set(pinnedForRender.map((x) => x.mid));
 
   const bar = ensurePinBar(stripRoot);
   syncPinBarSizingFromBili(stripRoot, bar);
   await ensurePinBarPrefs(bar);
-  renderPinBar(bar, pinned, {
+  renderPinBar(bar, pinnedForRender, {
     onClickMid: async (mid) => {
       // 设置高亮（在点击时立即显示反馈）
       setActiveUid(mid);
       
       // 直接在动态页内切换（不再打开空间页/不再桥接 DOM 点击）
-      const pinnedUp = pinned.find((p) => p.mid === mid);
+      const pinnedUp = pinnedForRender.find((p) => p.mid === mid);
       const ok = await filterFeedDirectly(stripRoot, mid, pinnedUp?.name, pinnedUp?.face);
       if (!ok) showToast('切换失败：暂时无法在动态页内刷新该UP的Feed，请稍后重试');
     },

@@ -10,8 +10,6 @@ export default defineContentScript({
   // 关键：在 MAIN world 运行，才能拦截页面自身发出的 fetch/xhr（隔离世界改 window.fetch 没用）
   world: 'MAIN',
   main() {
-    console.debug('[bili-pin] content script loaded');
-    
     // 尽早初始化API拦截器，在页面加载API请求之前
     initApiInterceptor();
     installDebugBridge();

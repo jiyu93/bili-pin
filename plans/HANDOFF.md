@@ -13,6 +13,7 @@
 目标：**不碰 B 站前端状态机**，通过改写请求参数让 B 站自行渲染正确的 feed。
 
 - **运行世界**：动态页 content script 必须是 `world: 'MAIN'`（隔离世界无法改写页面 fetch/xhr）
+- **存储一致性**：pins 必须落在扩展 `chrome.storage.local`，不能用页面 localStorage（子域不共享，会导致 space 页置顶后动态页看不到）
 - **mid 获取**：从 `portal` 接口响应拿 `mid/name/face`，不可靠的 DOM 解析一律回避
 - **切换 feed**：
   - 设置 `desiredHostMid`
@@ -26,24 +27,29 @@
    - `observeUpAvatarStrip(...)` 找到推荐横条根节点后调用 `injectPinUi()`
 
 2. `entrypoints/space.content.ts`
-   - `runAt: document_idle` + `world: 'MAIN'`
+   - `runAt: document_idle` + `world: 'ISOLATED'`（可直接访问 `chrome.storage.local`）
    - 监听 `body` 直接子节点新增的 `.vui_popover`（teleport 弹层容器），找到其中的 `.menu-popover__panel` 后插入一条 `.menu-popover__panel-item`
      - **位置**：优先放在“设置分组”上方，其次“取消关注”上方
      - **样式**：克隆一条原生菜单项作为模板（scoped CSS 需要 `data-v-*` 等属性），避免出现“字体颜色/hover 背景不一致”
 
-3. `src/bili/apiInterceptor.ts`
+3. `entrypoints/storageBridge.content.ts`
+   - `runAt: document_start` + `world: 'ISOLATED'`
+   - 提供 `window.postMessage` 的 storage bridge：给 MAIN world 代码转发 `chrome.storage.local.get/set`
+
+4. `src/bili/apiInterceptor.ts`
    - 拦截 `fetch`/`XHR`
    - 解析 `/x/polymer/web-dynamic/v1/portal` 的 `up_list.items[]`，缓存 `mid/name/face`
    - 若设置了 `desiredHostMid`：改写 `feed/*` 的 `host_mid`
    - 同步 UI：`desiredHostMid` ↔ `html[data-bili-pin-filtered-mid]`（用于隐藏 tabs）
 
-3. `src/ui/injectPinButtons.ts`
+5. `src/ui/injectPinButtons.ts`
    - 给推荐横条每个 UP 注入图钉按钮（定位到头像容器右上角）
    - **mid 映射策略**：用头像 URL → `getUpInfoByFace()` → portal 缓存 mid
    - 渲染置顶栏：`renderPinBar(...)`
+   - **昵称/头像纠错**：渲染前按 `mid` 用 portal 缓存回填 `name/face` 并写回 pins（修复 space 页曾误取签名/头像的历史脏数据）
    - 退出筛选态：用户点击推荐横条/tabs（capture + `e.isTrusted`）时清空 `desiredHostMid`
 
-4. `src/bili/feedSwitch.ts` & `src/bili/clickBridge.ts`
+6. `src/bili/feedSwitch.ts` & `src/bili/clickBridge.ts`
    - `clickBridge.filterFeedDirectly()` 仅调用 `switchFeedInDynamicPage()`
    - `feedSwitch` 为了“每次都触发请求”：优先点击一个**非 active** 的推荐 UP item，并轮换 index；必要时用其它兜底点击
 
@@ -70,6 +76,7 @@
 - 置顶筛选态：tabs 隐藏；点推荐横条/tabs 后退出筛选态
 - 连续切换置顶栏多个 UP：每次都触发切换，不出现“第二次没反应”
 - 打开任意 UP 个人空间主页：hover 右上角“已关注”→ 菜单里出现“置顶动态/取消置顶”（优先位于“设置分组”上方）；点击可写入/移除置顶数据（刷新动态页可见同步）
+- space 页置顶后：动态页置顶栏昵称/头像显示正确（不是签名；头像不丢失）
 
 ## 待办（优先级从高到低）
 - 拖拽排序（`pinBar.ts` + `pins.ts` 增加顺序字段）

@@ -5,6 +5,7 @@
  */
 
 import { extractFaceHash } from './faceKey';
+import { debugLog } from './debugFlag';
 
 export interface UpInfo {
   mid: string;
@@ -104,10 +105,10 @@ function processApiResponse(url: string, responseData: any): void {
     }
 
     if (ups.length > 0) {
-      console.debug('[bili-pin] extracted UP info from API response', { 
-        url, 
+      debugLog('[bili-pin] extracted UP info from API response', {
+        url,
         count: ups.length,
-        ups: ups.map(u => ({ mid: u.mid, name: u.name }))
+        ups: ups.map((u) => ({ mid: u.mid, name: u.name })),
       });
     }
 
@@ -220,7 +221,7 @@ function interceptXHR(): void {
 export function initApiInterceptor(): void {
   interceptFetch();
   interceptXHR();
-  console.debug('[bili-pin] API interceptor initialized');
+  debugLog('[bili-pin] API interceptor initialized');
 }
 
 export function setDesiredHostMid(mid: string | null): void {
