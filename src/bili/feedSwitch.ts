@@ -11,33 +11,52 @@ function safeClick(el: HTMLElement | null): boolean {
   }
 }
 
-function setFilteredUiMid(mid: string | null) {
-  try {
-    const root = document.documentElement;
-    if (!mid) {
-      delete (root as any).dataset.biliPinFilteredMid;
-      return;
-    }
-    (root as any).dataset.biliPinFilteredMid = String(mid);
-  } catch {
-    // ignore
+function findAnyRealUpItem(stripRoot: HTMLElement): HTMLElement | null {
+  const items = Array.from(stripRoot.querySelectorAll<HTMLElement>('.bili-dyn-up-list__item'));
+  if (items.length === 0) return null;
+
+  // 过滤“全部动态”（若存在）
+  for (const it of items) {
+    if (it.querySelector('.bili-dyn-up-list__item__face.all')) continue;
+    return it;
   }
+  return items[0] ?? null;
 }
 
-function triggerFeedReloadByTabs(): boolean {
-  const tabs = Array.from(
-    document.querySelectorAll<HTMLElement>('.bili-dyn-list-tabs__item'),
-  ).filter((x) => x.isConnected);
-  if (tabs.length < 2) return false;
+function findAllDynamicItem(stripRoot: HTMLElement): HTMLElement | null {
+  const allFace = stripRoot.querySelector<HTMLElement>('.bili-dyn-up-list__item__face.all');
+  return allFace?.closest<HTMLElement>('.bili-dyn-up-list__item') ?? null;
+}
 
-  const active = tabs.find((t) => t.classList.contains('active')) ?? null;
-  const other = tabs.find((t) => t !== active) ?? null;
-  if (!other) return false;
+function findActiveUpItem(stripRoot: HTMLElement): HTMLElement | null {
+  return stripRoot.querySelector<HTMLElement>('.bili-dyn-up-list__item.active');
+}
 
-  // 先切到另一个tab，确保触发请求；再切回“全部”(active) 以保持用户预期
-  if (!safeClick(other)) return false;
-  if (active) setTimeout(() => safeClick(active), 60);
-  return true;
+/**
+ * 为了保证“每次切换都能触发请求”，这里会挑一个“非当前 active”的推荐UP item 来点击。
+ * 若都找不到（比如只有一个），则退化为：先点“全部动态”再点该UP，强行制造状态变化。
+ */
+function findNonActiveRealUpItem(stripRoot: HTMLElement): HTMLElement | null {
+  const active = findActiveUpItem(stripRoot);
+  const items = Array.from(stripRoot.querySelectorAll<HTMLElement>('.bili-dyn-up-list__item'));
+  const realItems = items.filter((it) => !it.querySelector('.bili-dyn-up-list__item__face.all'));
+  if (realItems.length === 0) return null;
+
+  // 从上次 index 继续轮换，避免总点同一个导致“第二次没动静”
+  const rawIdx = Number(stripRoot.getAttribute('data-bili-pin-trigger-idx') || '0');
+  const startIdx = Number.isFinite(rawIdx) ? rawIdx : 0;
+
+  for (let k = 0; k < realItems.length; k += 1) {
+    const idx = (startIdx + k) % realItems.length;
+    const it = realItems[idx]!;
+    if (active && it === active) continue;
+    stripRoot.setAttribute('data-bili-pin-trigger-idx', String((idx + 1) % realItems.length));
+    return it;
+  }
+
+  // 全都 active（极端情况）：返回第一个
+  stripRoot.setAttribute('data-bili-pin-trigger-idx', String((startIdx + 1) % realItems.length));
+  return realItems[0] ?? null;
 }
 
 /**
@@ -54,19 +73,24 @@ export function switchFeedInDynamicPage(stripRoot: HTMLElement, mid: string): bo
   if (!/^\d+$/.test(m)) return false;
 
   setDesiredHostMid(m);
-  setFilteredUiMid(m);
 
-  // 0) 优先通过“全部/视频投稿/追番追剧/专栏”tab 触发刷新（最稳定：即使“全部动态”已被选中也会发请求）
-  if (triggerFeedReloadByTabs()) return true;
+  // 1) 优先点一个“非当前 active”的推荐UP，确保每次都触发切换
+  const realNonActive = findNonActiveRealUpItem(stripRoot);
+  if (safeClick(realNonActive)) return true;
 
-  // 1) 优先点击“全部动态”（重置/刷新最稳定）
-  const allFace = stripRoot.querySelector<HTMLElement>('.bili-dyn-up-list__item__face.all');
-  const allItem = allFace?.closest<HTMLElement>('.bili-dyn-up-list__item') ?? null;
-  if (safeClick(allItem)) return true;
+  // 2) 若只有一个推荐UP且已 active：先点“全部动态”制造变化，再点该UP
+  const allItem = findAllDynamicItem(stripRoot);
+  const anyReal = findAnyRealUpItem(stripRoot);
+  if (safeClick(allItem)) {
+    requestAnimationFrame(() => {
+      safeClick(anyReal);
+    });
+    return true;
+  }
 
-  // 2) 其次点击任意一个推荐 UP item（触发 feed reload）
-  const anyItem = stripRoot.querySelector<HTMLElement>('.bili-dyn-up-list__item');
-  if (safeClick(anyItem)) return true;
+  // 3) 再兜底：点击 tabs（全部/视频投稿/追番追剧/专栏）
+  const anyTab = document.querySelector<HTMLElement>('.bili-dyn-list-tabs__item');
+  if (safeClick(anyTab)) return true;
 
   return false;
 }

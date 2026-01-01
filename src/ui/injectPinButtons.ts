@@ -2,7 +2,7 @@ import { filterFeedDirectly } from '../bili/clickBridge';
 import { getPinnedUps, pinUp, unpinUp, type PinnedUp } from '../storage/pins';
 import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveUid } from './pinBar';
 import { showToast } from './toast';
-import { getUpInfoByFace, setDesiredHostMid } from '../bili/apiInterceptor';
+import { getDesiredHostMid, getUpInfoByFace, setDesiredHostMid } from '../bili/apiInterceptor';
 
 const BTN_CLASS = 'bili-pin-btn';
 const BTN_MARK = 'data-bili-pin-btn';
@@ -170,27 +170,54 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
  * 监听推荐列表的选中状态，同步高亮置顶栏
  */
 function observeRecommendationListSelection(stripRoot: HTMLElement): void {
-  // 关键：用 capture 阶段 + 只处理用户真实点击（isTrusted），
-  // 确保在B站自身click handler触发请求之前就清掉 desiredHostMid，
-  // 否则会出现“点推荐UP要点两次/甚至卡住”的现象。
+  // 监听推荐列表的点击事件
+  // 注意：用 capture 提前于 B 站自己的 click handler 执行，确保能在“发请求之前”清空 desiredHostMid
   stripRoot.addEventListener(
     'click',
     (e) => {
-      if (!e.isTrusted) return; // 我们自己 safeClick 触发的，不要干预
+    // 仅对“用户真实点击”生效：避免我们程序触发的 click 把 desiredHostMid 立刻清空
+    if (!(e as MouseEvent).isTrusted) return;
 
-      const target = e.target as HTMLElement;
-      const item = target.closest<HTMLElement>('.bili-dyn-up-list__item');
-      if (!item) return;
+    const target = e.target as HTMLElement;
+    const item = target.closest<HTMLElement>('.bili-dyn-up-list__item');
+    if (!item) return;
 
-      // 用户手动点击了B站原生推荐横条：退出“置顶筛选(mid改写)”模式
+    const mid = getItemMid(item);
+    // 用户在推荐条里做了任何切换意图：都应退出“置顶筛选模式”
+    if (getDesiredHostMid()) setDesiredHostMid(null);
+
+    if (!mid) {
+      // 点击了“全部动态”之类拿不到 mid 的入口：清空置顶栏高亮
+      setActiveUid(null);
+      return;
+    }
+
+    getPinnedUps().then((pinned) => {
+      const isPinned = pinned.some((p) => p.mid === mid);
+      // 点击了一个已置顶的UP：同步高亮；否则清空高亮，避免误导
+      setActiveUid(isPinned ? mid : null);
+    });
+    },
+    true,
+  );
+}
+
+function installGlobalExitFilterListenersOnce(): void {
+  const root = document.documentElement;
+  if (!root || root.getAttribute('data-bili-pin-exit-filter-listener') === '1') return;
+  root.setAttribute('data-bili-pin-exit-filter-listener', '1');
+
+  // tabs（全部/视频投稿/追番追剧/专栏）不在 stripRoot 内，需要全局监听
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (!(e as MouseEvent).isTrusted) return;
+      if (!getDesiredHostMid()) return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const tabItem = target.closest<HTMLElement>('.bili-dyn-list-tabs__item');
+      if (!tabItem) return;
       setDesiredHostMid(null);
-      try {
-        delete (document.documentElement as any).dataset.biliPinFilteredMid;
-      } catch {
-        // ignore
-      }
-
-      // 为了避免“两个框都在抢高亮/状态”的混乱：只要用户改用推荐横条，就清空置顶栏高亮
       setActiveUid(null);
     },
     true,
@@ -238,6 +265,8 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
     stripRoot.setAttribute('data-bili-pin-selection-observer', '1');
     observeRecommendationListSelection(stripRoot);
   }
+
+  installGlobalExitFilterListenersOnce();
 }
 
 export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {

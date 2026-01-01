@@ -49,15 +49,20 @@
 
 #### Bug #1: 点击置顶UP无法筛选Feed（核心问题）
 
-**问题描述**：
+**状态**：✅ 已修复（2026-01）
+
+**原问题描述**：
 - 点击置顶UP头像时，如果该UP**不在当前“关注UP推荐列表”**里，无法触发Feed刷新
 - 控制台会输出 `[bili-pin] failed to bridge click`
 - 这是**用户的核心需求**：必须能查看不在推荐列表的UP的动态
 
-**最新实现（已改造中，方向正确）**：
+**最终实现（已落地）**：
 - **mid 来源**：页面加载时拦截 `portal?up_list_more=1...`（`/x/polymer/web-dynamic/v1/portal`），响应中 `up_list.items[]` 自带 `mid/name/face`
 - **不再从 DOM 抠 mid**：`src/ui/injectPinButtons.ts` 只用头像 URL 的 `bfs/face/<hash>` 去 portal 缓存映射出 mid
-- **Feed 切换**：在 `MAIN world` 改写 B 站实际的 `feed/all?host_mid=...` 请求的 `host_mid`，让 B 站自己刷新/渲染 feed（不跳转 space 页）
+- **Feed 切换**：在 `MAIN world` 改写 B 站 `feed/*` 请求的 `host_mid`，让 B 站自己刷新/渲染 feed（不跳转 space 页）
+- **保证每次触发刷新**：`src/bili/feedSwitch.ts` 会点击一个“非当前 active”的推荐UP item（轮换），必要时先点“全部动态”再点 UP，避免出现“第二次点置顶没反应”
+- **置顶筛选态 UI**：通过 `html[data-bili-pin-filtered-mid]` 标记进入“置顶筛选模式”，隐藏 `.bili-dyn-list-tabs`（全部/视频投稿/追番追剧/专栏）
+- **退出筛选态**：用户点击推荐UP/“全部动态”/tabs 时，在 **capture 阶段** 清空 `desiredHostMid`，避免“第一次点击仍被改写导致要点两次”
 
 **用户要求**：
 > "我做这个插件的主要目的就是为了能够在置顶UP列表里随时查看关注UP推荐列表里没推荐的UP主的Feed流，所以这个依赖必须解开"
@@ -87,7 +92,7 @@
 - 需要给置顶UP栏的头像添加选中状态样式
 - 可能还需要同步高亮推荐列表中对应的UP（如果存在）
 - 需要监听Feed变化，判断当前筛选的是哪个UP
-（目前已实现置顶栏高亮，推荐横条高亮仍可优化）
+（目前已实现置顶栏高亮；推荐横条点击时会同步置顶栏高亮/清空高亮，推荐横条自身的视觉高亮仍由 B 站原逻辑控制）
 
 **相关文件**：
 - `src/styles/content.css` - 样式定义
@@ -116,7 +121,7 @@
 ### 核心逻辑
 - `src/ui/injectPinButtons.ts` - 注入置顶按钮和置顶栏的主要逻辑
 - `src/ui/pinBar.ts` - 置顶栏的渲染和交互
-- `src/bili/clickBridge.ts` - **需要重点修改**：当前桥接逻辑无法处理不在推荐列表的UP
+- `src/bili/clickBridge.ts` - 置顶切换入口（当前实现为“站内切换”，已不再依赖“桥接 DOM 点击”）
 - `src/bili/observe.ts` - DOM监听，确保在SPA路由变化时重新注入
 - `src/bili/selectors.ts` - DOM选择器，定位“关注UP推荐列表”
 - `src/storage/pins.ts` - 置顶数据存储和读取

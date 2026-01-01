@@ -19,6 +19,20 @@ const upInfoByMid = new Map<string, UpInfo>(); // key: mid
 let lastPortalUpList: UpInfo[] = [];
 let desiredHostMid: string | null = null;
 
+function syncFilteredMidAttr(): void {
+  try {
+    const root = document.documentElement;
+    if (!root) return;
+    if (desiredHostMid) {
+      root.setAttribute('data-bili-pin-filtered-mid', desiredHostMid);
+    } else {
+      root.removeAttribute('data-bili-pin-filtered-mid');
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function unwrapData(resp: any): any {
   return resp?.data ?? resp;
 }
@@ -211,6 +225,7 @@ export function initApiInterceptor(): void {
 
 export function setDesiredHostMid(mid: string | null): void {
   desiredHostMid = mid ? String(mid).trim() : null;
+  syncFilteredMidAttr();
 }
 
 export function getDesiredHostMid(): string | null {
