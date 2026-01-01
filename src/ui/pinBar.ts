@@ -12,6 +12,9 @@ export type PinBarHandlers = {
   onUnpinUid?: (uid: string) => void;
 };
 
+// 当前选中的UP uid（用于高亮显示）
+let currentActiveUid: string | null = null;
+
 async function storageGetBool(key: string, fallback: boolean): Promise<boolean> {
   const chromeStorage = (globalThis as any).chrome?.storage?.local;
   if (chromeStorage?.get) {
@@ -158,6 +161,35 @@ function updatePinBarCollapse(bar: HTMLElement): void {
   }
 }
 
+/**
+ * 设置当前激活的UP（用于高亮显示）
+ */
+export function setActiveUid(uid: string | null): void {
+  currentActiveUid = uid;
+  updateActiveHighlight();
+}
+
+/**
+ * 更新高亮显示
+ */
+function updateActiveHighlight(): void {
+  const bar = document.getElementById(PIN_BAR_ID);
+  if (!bar) return;
+
+  const list = bar.querySelector<HTMLElement>(`#${PIN_BAR_LIST_ID}`);
+  if (!list) return;
+
+  const items = Array.from(list.querySelectorAll<HTMLElement>('.bili-pin-bar__item'));
+  for (const item of items) {
+    const itemUid = item.dataset.uid;
+    if (itemUid === currentActiveUid) {
+      item.classList.add('is-active');
+    } else {
+      item.classList.remove('is-active');
+    }
+  }
+}
+
 export function renderPinBar(
   bar: HTMLElement,
   pinned: PinnedUp[],
@@ -171,7 +203,7 @@ export function renderPinBar(
   if (pinned.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'bili-pin-bar__empty';
-    empty.textContent = '还没有置顶，去头像列表点“置顶”吧';
+    empty.textContent = '还没有置顶，去头像列表点"置顶"吧';
     list.appendChild(empty);
     requestAnimationFrame(() => updatePinBarCollapse(bar));
     return;
@@ -201,6 +233,8 @@ export function renderPinBar(
     main.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      // 设置高亮
+      setActiveUid(up.uid);
       handlers.onClickUid?.(up.uid);
     });
 
@@ -218,6 +252,9 @@ export function renderPinBar(
     item.appendChild(unpin);
     list.appendChild(item);
   }
+
+  // 更新高亮状态
+  updateActiveHighlight();
 
   requestAnimationFrame(() => updatePinBarCollapse(bar));
 }

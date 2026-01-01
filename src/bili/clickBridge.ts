@@ -1,63 +1,22 @@
-import { makeFaceKey } from './faceKey';
-import { extractUidFromHref, findSpaceAnchors } from './selectors';
-
-function fireClick(el: HTMLElement): void {
-  el.dispatchEvent(
-    new MouseEvent('click', {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-    }),
-  );
-}
+import { switchFeedInDynamicPage } from './feedSwitch';
 
 /**
- * 尝试把“置顶栏点击 uid”桥接到“关注UP推荐列表点击该UP”的行为。
- * 优先触发原列表中对应的 anchor（或其更外层可点击容器）。
+ * 直接筛选Feed
+ * 
+ * @param stripRoot 推荐列表的根元素
+ * @param uid 目标UP的uid（必须是真实的数字mid）
+ * @returns 是否成功触发筛选
  */
-export function clickUidInStrip(stripRoot: HTMLElement, uid: string): boolean {
-  const targetUid = String(uid ?? '').trim();
-  if (!targetUid) return false;
-
-  // 兜底：如果 uid 是我们构造的 faceKey/facehKey（拿不到真实uid时），用头像图生成 key 来匹配
-  if (targetUid.startsWith('face:') || targetUid.startsWith('faceh:')) {
-    const items = Array.from(stripRoot.querySelectorAll<HTMLElement>('.bili-dyn-up-list__item'));
-    for (const item of items) {
-      const img = item.querySelector<HTMLImageElement>('img');
-      const src = img?.currentSrc || img?.src || '';
-      const key = makeFaceKey(src);
-      if (key && key === targetUid) {
-        try {
-          fireClick(item);
-          item.click?.();
-          return true;
-        } catch {
-          return false;
-        }
-      }
-    }
-    return false;
-  }
-
-  const anchors = findSpaceAnchors(stripRoot);
-  const a = anchors.find((x) => extractUidFromHref(x.href) === targetUid);
-  if (!a) return false;
-
-  // 有些实现把点击绑定在更外层的item上
-  const clickable =
-    a.closest<HTMLElement>('[role="button"]') ??
-    a.closest<HTMLElement>('button') ??
-    a.closest<HTMLElement>('li') ??
-    a;
-
-  try {
-    fireClick(clickable);
-    // 保险：部分站点监听原生 click()
-    clickable.click?.();
-    return true;
-  } catch {
-    return false;
-  }
+export async function filterFeedDirectly(
+  stripRoot: HTMLElement,
+  uid: string,
+  _name?: string,
+  _face?: string,
+): Promise<boolean> {
+  const mid = String(uid ?? '').trim();
+  if (!/^\d+$/.test(mid)) return false;
+  // 直接在动态页内切换（不会打开空间页/新标签）
+  return switchFeedInDynamicPage(stripRoot, mid);
 }
 
 

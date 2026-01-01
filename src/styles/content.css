@@ -142,6 +142,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
+  transition: color 200ms ease;
+}
+
+/* 高亮状态：选中时的蓝色圆框和蓝色文字 */
+.bili-pin-bar__item.is-active .bili-pin-bar__face {
+  border: 2px solid #00a1d6;
+  box-shadow: 0 0 0 1px rgba(0, 161, 214, 0.2);
+}
+
+.bili-pin-bar__item.is-active .bili-pin-bar__name {
+  color: #00a1d6;
+  font-weight: 500;
 }
 
 /* 关注UP推荐列表上的“置顶/已置顶”按钮 */
@@ -181,6 +193,38 @@
   pointer-events: auto;
   transform: translateY(0);
   transition: opacity 120ms ease, transform 120ms ease, visibility 0ms;
+}
+
+/* UP主个人首页的置顶按钮 */
+.bili-pin-space-item {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bili-pin-space-button {
+  width: 100%;
+  padding: 8px 16px;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.75);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.bili-pin-space-button:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.bili-pin-space-button:active {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+.bili-pin-space-item[data-pinned="1"] .bili-pin-space-button {
+  color: #00a1d6;
+  font-weight: 500;
 }
 
 

@@ -1,47 +1,28 @@
 import { getUpAvatarStripDiagnostics } from './selectors';
-
-const SOURCE = 'bili-pin';
-
-function injectPageScript() {
-  const script = document.createElement('script');
-  script.textContent = `
-(() => {
-  const SOURCE = ${JSON.stringify(SOURCE)};
-  // 页面console可用：window.__biliPin.dump()
-  window.__biliPin = {
-    dump() {
-      window.postMessage({ source: SOURCE, type: 'DUMP_REQUEST' }, '*');
-    },
-  };
-  window.addEventListener('message', (ev) => {
-    const data = ev && ev.data;
-    if (!data || data.source !== SOURCE) return;
-    if (data.type === 'DUMP_RESPONSE') {
-      console.info('[bili-pin] diagnostics', data.payload);
-    }
-  });
-})();
-`;
-  document.documentElement.appendChild(script);
-  script.remove();
-}
+import { getAllCachedUpInfo } from './apiInterceptor';
+import { getPinnedUps } from '../storage/pins';
 
 export function installDebugBridge() {
-  // 只注入一次
+  // 只安装一次
   const key = '__biliPinBridgeInstalled';
   if ((window as any)[key]) return;
   (window as any)[key] = true;
 
-  injectPageScript();
-
-  window.addEventListener('message', (ev) => {
-    const data = ev && (ev as MessageEvent).data;
-    if (!data || data.source !== SOURCE) return;
-    if (data.type === 'DUMP_REQUEST') {
-      const payload = getUpAvatarStripDiagnostics();
-      window.postMessage({ source: SOURCE, type: 'DUMP_RESPONSE', payload }, '*');
-    }
-  });
+  // 不再注入 <script>（会被B站 CSP 拦），直接在当前 world 挂调试方法
+  (window as any).__biliPin = {
+    dump() {
+      console.info('[bili-pin] diagnostics', getUpAvatarStripDiagnostics());
+    },
+    async cache() {
+      const cachedUps = getAllCachedUpInfo();
+      const pinnedUps = await getPinnedUps();
+      console.info('[bili-pin] cache', {
+        cachedUpsCount: cachedUps.length,
+        pinnedUpsCount: pinnedUps.length,
+        cachedUps: cachedUps.slice(0, 10).map((u) => ({ mid: u.mid, name: u.name })),
+      });
+    },
+  };
 }
 
 

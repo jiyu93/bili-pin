@@ -7,7 +7,11 @@ export default defineConfig({
     version: '0.0.1',
     description: '在B站动态页添加置顶UP头像栏',
     permissions: ['storage'],
-    host_permissions: ['https://t.bilibili.com/*'],
+    host_permissions: [
+      'https://t.bilibili.com/*',
+      'https://space.bilibili.com/*',
+      'https://api.bilibili.com/*',
+    ],
   },
 });
 

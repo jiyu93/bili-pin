@@ -11,15 +11,18 @@ const STORAGE_KEY = 'biliPin.pins.v1';
 
 function normalizeItem(item: PinnedUp): PinnedUp | null {
   const face = String(item.face ?? '').trim() || undefined;
-
-  // 尽量把历史 numeric uid 迁移到 faceKey（因为动态页关注UP推荐列表不一定暴露真实uid）
-  const faceKey = makeFaceKey(face);
   const baseUid = String(item.uid ?? '').trim();
-  const uid = normalizeUid(faceKey ?? baseUid, face);
 
-  if (!uid) return null;
+  // 只接受真实的数字uid（mid），不接受faceKey
+  if (!/^\d+$/.test(baseUid)) {
+    // 如果不是真实的数字mid，丢弃该项
+    console.warn('[bili-pin] discarding item without real mid', { uid: baseUid, name: item.name });
+    return null;
+  }
+
+  // 这是真实的数字mid，直接使用
   return {
-    uid,
+    uid: baseUid,
     name: item.name,
     face,
     pinnedAt: Number(item.pinnedAt ?? 0) || Date.now(),
@@ -107,32 +110,77 @@ export async function isPinned(uid: string): Promise<boolean> {
 
 export async function pinUp(input: Omit<PinnedUp, 'pinnedAt'> & { pinnedAt?: number }): Promise<PinnedUp[]> {
   const face = String(input.face ?? '').trim() || undefined;
-  const uid = normalizeUid(String(input.uid ?? ''), face) || makeFaceKey(face) || String(input.uid ?? '').trim();
-  if (!uid) return await getPinnedUps();
+  const inputUid = String(input.uid ?? '').trim();
+  
+  // 只接受真实的数字uid（mid），不接受faceKey
+  if (!/^\d+$/.test(inputUid)) {
+    console.warn('[bili-pin] cannot pin UP without real mid', { uid: inputUid, name: input.name });
+    throw new Error(`无法置顶：未获取到真实的UP ID。请确保该UP在推荐列表中，或等待页面加载完成后再试。`);
+  }
 
   const list = await getPinnedUps();
-  const existing = list.find((x) => x.uid === uid);
+  const existing = list.find((x) => x.uid === inputUid);
   const next: PinnedUp = {
-    uid,
+    uid: inputUid,
     name: input.name ?? existing?.name,
     face: face ?? existing?.face,
     pinnedAt: input.pinnedAt ?? existing?.pinnedAt ?? Date.now(),
   };
 
-  const merged = [next, ...list.filter((x) => x.uid !== uid)];
+  const merged = [next, ...list.filter((x) => x.uid !== inputUid)];
   await setPinnedUps(merged);
   return await getPinnedUps();
 }
 
-export async function unpinUp(uid: string): Promise<PinnedUp[]> {
-  const target = normalizeUid(String(uid ?? ''), undefined);
-  const list = await getPinnedUps();
-
-  // 兼容：如果 target 是 faceKey，则同时清掉历史遗留的同一 face 的不同 uid 记录
-  let next = list.filter((x) => x.uid !== target);
-  if (target.startsWith('face:') || target.startsWith('faceh:')) {
-    next = next.filter((x) => makeFaceKey(x.face) !== target);
+/**
+ * 更新UP的mid（用于迁移旧数据）
+ * 注意：现在只接受真实的数字mid，此函数主要用于数据迁移
+ */
+export async function updateUpMid(oldUid: string, newMid: string): Promise<PinnedUp[]> {
+  if (!/^\d+$/.test(newMid)) {
+    console.warn('[bili-pin] invalid newMid', { newMid });
+    return await getPinnedUps();
   }
+
+  const list = await getPinnedUps();
+  
+  // 查找匹配的UP（通过旧的uid）
+  const index = list.findIndex((x) => x.uid === oldUid);
+  
+  if (index >= 0) {
+    // 更新为新的mid
+    const existing = list[index];
+    const updated: PinnedUp = {
+      ...existing,
+      uid: newMid,
+    };
+    
+    // 移除旧的，添加新的
+    const updatedList = [...list];
+    updatedList[index] = updated;
+    await setPinnedUps(updatedList);
+    
+    console.debug('[bili-pin] updated UP mid', { 
+      oldUid, 
+      newMid,
+      name: existing.name 
+    });
+  }
+  
+  return await getPinnedUps();
+}
+
+export async function unpinUp(uid: string): Promise<PinnedUp[]> {
+  const target = String(uid ?? '').trim();
+  
+  // 只处理真实的数字mid
+  if (!/^\d+$/.test(target)) {
+    console.warn('[bili-pin] cannot unpin: invalid mid', { uid: target });
+    return await getPinnedUps();
+  }
+
+  const list = await getPinnedUps();
+  const next = list.filter((x) => x.uid !== target);
 
   await setPinnedUps(next);
   return next;

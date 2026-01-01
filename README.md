@@ -44,6 +44,7 @@ npm run build
 
 - **PRD（主需求文档）**：[`plans/prd.md`](plans/prd.md)
 - **Roadmap（版本规划）**：[`plans/roadmap.md`](plans/roadmap.md)
+- **任务交接文档**：`plans/HANDOFF.md` - 新会话请先阅读此文档了解当前状态和待办事项
 
 ## 说明
 

@@ -112,6 +112,26 @@ export type UpStripDiagnostics = {
   }>;
 };
 
+/**
+ * 查找动态Feed列表容器
+ */
+export function findDynamicFeedContainer(): HTMLElement | null {
+  // 尝试多个可能的选择器
+  const candidates = [
+    '.bili-dyn-list__items',
+    '.bili-dyn-list',
+    '[class*="dyn-list"]',
+    '[class*="feed-list"]',
+  ];
+
+  for (const selector of candidates) {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (el) return el;
+  }
+
+  return null;
+}
+
 export function getUpAvatarStripDiagnostics(): UpStripDiagnostics {
   const allAnchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'));
   const uidAnchors = findSpaceAnchors(document);
