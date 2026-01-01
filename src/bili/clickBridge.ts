@@ -1,3 +1,4 @@
+import { makeFaceKey } from './faceKey';
 import { extractUidFromHref, findSpaceAnchors } from './selectors';
 
 function fireClick(el: HTMLElement): void {
@@ -18,14 +19,14 @@ export function clickUidInStrip(stripRoot: HTMLElement, uid: string): boolean {
   const targetUid = String(uid ?? '').trim();
   if (!targetUid) return false;
 
-  // 兜底：如果 uid 是我们构造的 faceKey（拿不到真实uid时），用头像图匹配
-  if (targetUid.startsWith('face:')) {
-    const face = targetUid.slice('face:'.length);
+  // 兜底：如果 uid 是我们构造的 faceKey/facehKey（拿不到真实uid时），用头像图生成 key 来匹配
+  if (targetUid.startsWith('face:') || targetUid.startsWith('faceh:')) {
     const items = Array.from(stripRoot.querySelectorAll<HTMLElement>('.bili-dyn-up-list__item'));
     for (const item of items) {
       const img = item.querySelector<HTMLImageElement>('img');
       const src = img?.currentSrc || img?.src || '';
-      if (src && src.includes(face)) {
+      const key = makeFaceKey(src);
+      if (key && key === targetUid) {
         try {
           fireClick(item);
           item.click?.();

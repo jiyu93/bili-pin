@@ -130,9 +130,8 @@ export async function unpinUp(uid: string): Promise<PinnedUp[]> {
 
   // 兼容：如果 target 是 faceKey，则同时清掉历史遗留的同一 face 的不同 uid 记录
   let next = list.filter((x) => x.uid !== target);
-  if (target.startsWith('face:')) {
-    const hash = target.slice('face:'.length);
-    next = next.filter((x) => makeFaceKey(x.face) !== `face:${hash}`);
+  if (target.startsWith('face:') || target.startsWith('faceh:')) {
+    next = next.filter((x) => makeFaceKey(x.face) !== target);
   }
 
   await setPinnedUps(next);
