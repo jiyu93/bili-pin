@@ -2,7 +2,7 @@ import { filterFeedDirectly } from '../bili/clickBridge';
 import { getPinnedUps, pinUp, setPinnedUps, unpinUp, type PinnedUp } from '../storage/pins';
 import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveUid } from './pinBar';
 import { showToast } from './toast';
-import { getDesiredHostMid, getUpInfoByFace, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
+import { getDesiredHostMid, getUpInfoByFace, getUpInfoByName, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
 import { forceReloadAllFeed } from '../bili/feedSwitch';
 
 const BTN_CLASS = 'bili-pin-btn';
@@ -44,10 +44,24 @@ function extractNameAndFaceFromItem(item: HTMLElement): Pick<PinnedUp, 'name' | 
 function getItemMid(item: HTMLElement): string | null {
   // 只从 portal 缓存映射 mid：页面打开时 portal(up_list) 已返回 mid/name/face
   const img = item.querySelector<HTMLImageElement>('img');
+  const nameEl = item.querySelector<HTMLElement>('.bili-dyn-up-list__item__name');
+
+  // 1. 优先通过头像 hash 匹配（最准确）
   if (img) {
     const face = img.currentSrc || img.src || '';
     if (face) {
       const upInfo = getUpInfoByFace(face);
+      if (upInfo?.mid && /^\d+$/.test(upInfo.mid)) {
+        return upInfo.mid;
+      }
+    }
+  }
+
+  // 2. 兜底：通过名字匹配（可能重名，但推荐列表范围内概率极低）
+  if (nameEl) {
+    const name = (nameEl.textContent || '').trim();
+    if (name) {
+      const upInfo = getUpInfoByName(name);
       if (upInfo?.mid && /^\d+$/.test(upInfo.mid)) {
         return upInfo.mid;
       }

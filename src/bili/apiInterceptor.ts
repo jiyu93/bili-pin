@@ -299,6 +299,15 @@ export function getUpInfoByFace(faceUrl: string): UpInfo | null {
 }
 
 /**
+ * 通过名称获取UP信息（从最近一次 portal 列表中查找，作为兜底）
+ */
+export function getUpInfoByName(name: string): UpInfo | null {
+  const n = name.trim();
+  if (!n) return null;
+  return lastPortalUpList.find((u) => u.name === n) || null;
+}
+
+/**
  * 获取所有缓存的UP信息
  */
 export function getAllCachedUpInfo(): UpInfo[] {

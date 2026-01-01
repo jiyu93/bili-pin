@@ -207,7 +207,8 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   line-clamp: var(--bili-pin-name-lines);
   -webkit-line-clamp: var(--bili-pin-name-lines);
   -webkit-box-orient: vertical;
-  max-height: var(--bili-pin-name-max-height);
+  /* 强制固定高度，避免因单行/双行文字混排导致 Grid 行高抖动 */
+  height: var(--bili-pin-name-max-height);
 }
 
 /* 高亮状态：选中时的蓝色圆框和蓝色文字 */
