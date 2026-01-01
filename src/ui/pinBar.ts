@@ -73,7 +73,7 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
 
   const titleText = document.createElement('span');
   titleText.className = 'bili-pin-bar__titleText';
-  titleText.textContent = '置顶UP';
+  titleText.textContent = '置顶关注';
 
   const count = document.createElement('span');
   count.id = PIN_BAR_COUNT_ID;
@@ -150,7 +150,7 @@ function updatePinBarCollapse(bar: HTMLElement): void {
 
   // 文案
   if (needsToggle) {
-    toggle.textContent = expanded ? '收起' : `展开（还有${hiddenCount}个）`;
+    toggle.textContent = expanded ? '收起' : '展开';
   } else {
     // 不需要展开：强制为收起状态，避免占位
     bar.dataset.expanded = '0';
