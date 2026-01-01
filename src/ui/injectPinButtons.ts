@@ -2,7 +2,7 @@ import { extractUidFromHref, findSpaceAnchors } from '../bili/selectors';
 import { clickUidInStrip } from '../bili/clickBridge';
 import { makeFaceKey } from '../bili/faceKey';
 import { getPinnedUps, pinUp, unpinUp, type PinnedUp } from '../storage/pins';
-import { ensurePinBar, renderPinBar } from './pinBar';
+import { ensurePinBar, ensurePinBarPrefs, renderPinBar } from './pinBar';
 
 const BTN_CLASS = 'bili-pin-btn';
 const BTN_MARK = 'data-bili-pin-btn';
@@ -111,6 +111,7 @@ export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
   const pinnedSet = new Set(pinned.map((x) => x.uid));
 
   const bar = ensurePinBar(stripRoot);
+  await ensurePinBarPrefs(bar);
   renderPinBar(bar, pinned, {
     onClickUid: (uid) => {
       const ok = clickUidInStrip(stripRoot, uid);

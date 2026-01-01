@@ -3,10 +3,54 @@ import type { PinnedUp } from '../storage/pins';
 export const PIN_BAR_ID = 'bili-pin-pinbar';
 export const PIN_BAR_LIST_ID = 'bili-pin-pinbar-list';
 export const PIN_BAR_TOGGLE_ID = 'bili-pin-pinbar-toggle';
+export const PIN_BAR_COUNT_ID = 'bili-pin-pinbar-count';
+
+const PIN_BAR_EXPANDED_KEY = 'biliPin.ui.pinBarExpanded.v1';
 
 export type PinBarHandlers = {
   onClickUid?: (uid: string) => void;
 };
+
+async function storageGetBool(key: string, fallback: boolean): Promise<boolean> {
+  const chromeStorage = globalThis.chrome?.storage?.local;
+  if (chromeStorage?.get) {
+    return await new Promise<boolean>((resolve) => {
+      chromeStorage.get({ [key]: fallback }, (result: Record<string, unknown>) => {
+        resolve(Boolean(result?.[key] ?? fallback));
+      });
+    });
+  }
+
+  try {
+    const raw = globalThis.localStorage?.getItem(key);
+    return raw ? Boolean(JSON.parse(raw)) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function storageSetBool(key: string, value: boolean): Promise<void> {
+  const chromeStorage = globalThis.chrome?.storage?.local;
+  if (chromeStorage?.set) {
+    await new Promise<void>((resolve) => {
+      chromeStorage.set({ [key]: value }, () => resolve());
+    });
+    return;
+  }
+
+  try {
+    globalThis.localStorage?.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+export async function ensurePinBarPrefs(bar: HTMLElement): Promise<void> {
+  if (bar.dataset.prefsLoaded === '1') return;
+  bar.dataset.prefsLoaded = '1';
+  const expanded = await storageGetBool(PIN_BAR_EXPANDED_KEY, false);
+  bar.dataset.expanded = expanded ? '1' : '0';
+}
 
 export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
   const existing = document.getElementById(PIN_BAR_ID);
@@ -22,7 +66,18 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
 
   const title = document.createElement('div');
   title.className = 'bili-pin-bar__title';
-  title.textContent = '置顶UP';
+
+  const titleText = document.createElement('span');
+  titleText.className = 'bili-pin-bar__titleText';
+  titleText.textContent = '置顶UP';
+
+  const count = document.createElement('span');
+  count.id = PIN_BAR_COUNT_ID;
+  count.className = 'bili-pin-bar__count';
+  count.textContent = '0';
+
+  title.appendChild(titleText);
+  title.appendChild(count);
 
   const toggle = document.createElement('button');
   toggle.id = PIN_BAR_TOGGLE_ID;
@@ -35,6 +90,8 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
     e.stopPropagation();
     const next = bar.dataset.expanded === '1' ? '0' : '1';
     bar.dataset.expanded = next;
+    // 记住展开/收起状态
+    storageSetBool(PIN_BAR_EXPANDED_KEY, next === '1').catch(() => {});
     // 切换后重新计算是否需要按钮/文案
     requestAnimationFrame(() => updatePinBarCollapse(bar));
   });
@@ -66,26 +123,37 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
 function updatePinBarCollapse(bar: HTMLElement): void {
   const list = bar.querySelector<HTMLElement>(`#${PIN_BAR_LIST_ID}`);
   const toggle = bar.querySelector<HTMLButtonElement>(`#${PIN_BAR_TOGGLE_ID}`);
+  const countEl = bar.querySelector<HTMLElement>(`#${PIN_BAR_COUNT_ID}`);
   if (!list || !toggle) return;
 
   const expanded = bar.dataset.expanded === '1';
   list.classList.toggle('is-expanded', expanded);
   list.classList.toggle('is-collapsed', !expanded);
 
-  // 判断是否需要展开按钮：用折叠高度阈值判断，而不是用 clientHeight（展开后会误判）
-  const collapsedMax =
-    Number.parseFloat(getComputedStyle(list).getPropertyValue('--bili-pin-collapsed-max-height')) || 72;
-  const needsToggle = list.scrollHeight > collapsedMax + 2;
+  const items = Array.from(list.querySelectorAll<HTMLElement>('.bili-pin-bar__item'));
+  const total = items.length;
+  if (countEl) countEl.textContent = String(total);
+
+  // 判断是否有第二行：用 offsetTop 判断，比高度更直观
+  let hiddenCount = 0;
+  if (items.length > 0) {
+    const firstTop = Math.min(...items.map((el) => el.offsetTop));
+    hiddenCount = items.filter((el) => el.offsetTop > firstTop + 1).length;
+  }
+
+  const needsToggle = hiddenCount > 0;
   toggle.style.display = needsToggle ? '' : 'none';
 
   // 文案
   if (needsToggle) {
-    toggle.textContent = expanded ? '收起' : '展开';
+    toggle.textContent = expanded ? '收起' : `展开（还有${hiddenCount}个）`;
   } else {
     // 不需要展开：强制为收起状态，避免占位
     bar.dataset.expanded = '0';
     list.classList.remove('is-expanded');
     list.classList.add('is-collapsed');
+    // 顺带把状态记为收起，避免下次加载时仍是展开
+    storageSetBool(PIN_BAR_EXPANDED_KEY, false).catch(() => {});
   }
 }
 
