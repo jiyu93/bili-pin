@@ -83,15 +83,62 @@ function extractUpInfoFromPortalResponse(data: any): UpInfo[] {
 }
 
 /**
+ * 从 feed/* 接口响应中提取作者信息（用于动态流卡片：三点菜单等场景经常拿不到 space 链接）
+ * 常见结构：data.items[].modules.module_author -> { mid, name/uname, face }
+ * 也可能存在转发/引用：orig.modules.module_author 或 desc.user_profile.info
+ */
+function extractUpInfoFromFeedResponse(data: any): UpInfo[] {
+  const ups: UpInfo[] = [];
+  try {
+    const d = unwrapData(data);
+    const items = d?.items ?? d?.list ?? d?.data?.items ?? null;
+    if (!Array.isArray(items)) return ups;
+
+    const pickFromAuthorModule = (obj: any): UpInfo | null => {
+      const mod = obj?.modules?.module_author ?? obj?.modules?.moduleAuthor ?? null;
+      const mid = mod?.mid ?? mod?.uid ?? null;
+      const face = mod?.face ?? mod?.avatar ?? null;
+      const name = mod?.name ?? mod?.uname ?? mod?.title ?? '';
+      if (!mid || !face) return null;
+      return { mid: String(mid), face: String(face), name: String(name ?? '') };
+    };
+
+    const pickFromUserProfile = (obj: any): UpInfo | null => {
+      const info = obj?.desc?.user_profile?.info ?? obj?.user_profile?.info ?? null;
+      const mid = info?.mid ?? info?.uid ?? null;
+      const face = info?.face ?? info?.avatar ?? null;
+      const name = info?.uname ?? info?.name ?? '';
+      if (!mid || !face) return null;
+      return { mid: String(mid), face: String(face), name: String(name ?? '') };
+    };
+
+    for (const it of items) {
+      const a1 = pickFromAuthorModule(it);
+      if (a1) ups.push(a1);
+
+      const a2 = pickFromAuthorModule(it?.orig);
+      if (a2) ups.push(a2);
+
+      const a3 = pickFromUserProfile(it);
+      if (a3) ups.push(a3);
+    }
+  } catch {
+    // ignore
+  }
+  return ups;
+}
+
+/**
  * 处理API响应，提取UP信息并缓存
  */
 function processApiResponse(url: string, responseData: any): void {
   try {
-    // 只解析“推荐UP横条”的 portal 接口，避免做无关解析（也避免你看到“太多请求/太多逻辑”）
-    if (!url.includes('/x/polymer/web-dynamic/v1/portal')) return;
+    const isPortal = url.includes('/x/polymer/web-dynamic/v1/portal');
+    const isFeed = url.includes('/x/polymer/web-dynamic/v1/feed/');
+    if (!isPortal && !isFeed) return;
 
-    const ups = extractUpInfoFromPortalResponse(responseData);
-    if (ups.length) lastPortalUpList = ups;
+    const ups = isPortal ? extractUpInfoFromPortalResponse(responseData) : extractUpInfoFromFeedResponse(responseData);
+    if (isPortal && ups.length) lastPortalUpList = ups;
 
     // 缓存UP信息（用头像 hash 做关联，用于把“DOM里的头像”映射到 “portal给的mid”）
     for (const up of ups) {
@@ -113,11 +160,13 @@ function processApiResponse(url: string, responseData: any): void {
     }
 
     // 通知 UI：portal up_list 已 ready（让按钮重算 mid 映射）
-    window.dispatchEvent(
-      new CustomEvent('bili-pin:portal-up-list', {
-        detail: { count: ups.length },
-      }),
-    );
+    if (isPortal) {
+      window.dispatchEvent(
+        new CustomEvent('bili-pin:portal-up-list', {
+          detail: { count: ups.length },
+        }),
+      );
+    }
   } catch (error) {
     console.warn('[bili-pin] failed to process API response', error);
   }

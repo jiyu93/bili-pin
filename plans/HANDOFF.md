@@ -9,6 +9,7 @@
 - **图标**：图钉（Tabler outline/filled 两态），取消（Tabler x）
 - **个人空间主页** `https://space.bilibili.com/*`：在右上角“已关注”按钮的 hover 菜单里新增“置顶动态/取消置顶”，与动态页置顶数据完全共用
 - **视频播放页** `https://www.bilibili.com/video/*`：在右侧 UP 信息区“已关注”按钮的 hover 菜单里新增“置顶动态/取消置顶”，与动态页置顶数据完全共用
+- **动态首页 feed** `https://t.bilibili.com/*`：在每条动态卡片右上角“三点菜单”（菜单项包含“取消关注/举报”）里新增“置顶动态/取消置顶”，与置顶栏数据完全共用
 
 ## 核心架构（为什么这样做）
 目标：**不碰 B 站前端状态机**，通过改写请求参数让 B 站自行渲染正确的 feed。
@@ -25,6 +26,7 @@
 1. `entrypoints/content.ts`
    - `runAt: document_start` + `world: 'MAIN'`
    - `initApiInterceptor()` 先拦截 API
+   - 监听动态流 feed 卡片“三点菜单”并注入“置顶动态/取消置顶”
    - `observeUpAvatarStrip(...)` 找到推荐横条根节点后调用 `injectPinUi()`
 
 2. `entrypoints/space.content.ts`
@@ -40,6 +42,7 @@
 4. `src/bili/apiInterceptor.ts`
    - 拦截 `fetch`/`XHR`
    - 解析 `/x/polymer/web-dynamic/v1/portal` 的 `up_list.items[]`，缓存 `mid/name/face`
+    - 解析 `/x/polymer/web-dynamic/v1/feed/*` 的 `items[].modules.module_author`（含少量兜底结构），同样缓存 `mid/name/face`
    - 若设置了 `desiredHostMid`：改写 `feed/*` 的 `host_mid`
    - 同步 UI：`desiredHostMid` ↔ `html[data-bili-pin-filtered-mid]`（用于隐藏 tabs）
 
@@ -59,6 +62,15 @@
    - 监听/扫描 `van-popover`（`.van-popover.van-popper`），识别包含“设置分组/取消关注”的菜单后，**克隆原生菜单项** 插入“置顶动态/取消置顶`
      - 该菜单在当前 video 页结构中是：`ul.follow_dropdown > li`
    - UP 信息：优先 `__INITIAL_STATE__.videoData.owner`，DOM 兜底（space 链接/昵称/头像）
+
+8. `src/ui/dynamicMoreMenuPin.ts`
+   - 动态流卡片右上角 `.bili-dyn-more__btn` 打开菜单（包含“取消关注/举报”）后注入“置顶动态/取消置顶”
+   - 菜单可能不在卡片内部（cascader/popup 可能 teleport），因此会从“当前可见且包含 取消关注/举报 的 options 面板”中定位目标菜单并注入
+   - 通过 **克隆 `.bili-cascader-options__item`** 注入，保证样式完全一致
+   - 作者 mid 获取优先级：
+     - 卡片内 `a[href*="space.bilibili.com/"]`
+     - 否则用头像 URL 通过 `apiInterceptor` 的缓存（portal/feed 响应）反查 mid
+   - hover 体验：菜单与按钮之间存在 hover 断档，使用 `data-bili-pin-more-hover-bridge` + CSS `::before` 做透明桥接，避免菜单闪烁
 
 ## 样式与交互（UI 要点）
 - `src/styles/content.css`
@@ -85,6 +97,7 @@
 - 打开任意 UP 个人空间主页：hover 右上角“已关注”→ 菜单里出现“置顶动态/取消置顶”（优先位于“设置分组”上方）；点击可写入/移除置顶数据（刷新动态页可见同步）
 - space 页置顶后：动态页置顶栏昵称/头像显示正确（不是签名；头像不丢失）
 - 打开任意视频播放页：hover 右侧 UP 信息区“已关注”→ 菜单里出现“置顶动态/取消置顶”（优先位于“设置分组”上方）；点击可写入/移除置顶数据（刷新动态页可见同步）
+- 在动态首页任意动态卡片：hover 右上角“三点菜单”→ 菜单里出现“置顶动态/取消置顶”（优先位于“取消关注”上方）；点击可写入/移除置顶数据（置顶栏同步）
 
 ## 待办（优先级从高到低）
 - 拖拽排序（`pinBar.ts` + `pins.ts` 增加顺序字段）

@@ -250,6 +250,23 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   display: block;
 }
 
+/* 动态流卡片“三点菜单”：
+   B站的 hover 判定在按钮与弹层之间可能存在断档，鼠标移动时会导致菜单闪烁。
+   通过给当前打开的 popper 添加一个透明的 hover 桥，改善体验。 */
+.bili-cascader__list[data-bili-pin-more-hover-bridge="1"] {
+  position: relative;
+}
+
+.bili-cascader__list[data-bili-pin-more-hover-bridge="1"]::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: transparent;
+}
+
 /* hover/聚焦时显示按钮 */
 .bili-dyn-up-list__item:hover .bili-pin-btn,
 .bili-dyn-up-list__item:focus-within .bili-pin-btn {
