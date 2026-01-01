@@ -29,9 +29,10 @@ function rewriteHostMidIfNeeded(rawUrl: string): string {
     const u = new URL(rawUrl, window.location.origin);
     const p = u.pathname;
     // 只改写动态页 feed 的请求，让 B 站自己走原有渲染逻辑
-    const isFeedAll = p.includes('/x/polymer/web-dynamic/v1/feed/all');
-    const isFeedSpace = p.includes('/x/polymer/web-dynamic/v1/feed/space');
-    if (!isFeedAll && !isFeedSpace) return rawUrl;
+    // 注意：B站不同tab/场景会走 feed/all、feed/space、feed/video、feed/article... 等不同端点。
+    // 若只改写 feed/all，会出现“第一次触发走了别的feed端点 -> 没被改写 -> 需要点两次”的现象。
+    const isDynamicFeed = p.includes('/x/polymer/web-dynamic/v1/feed/');
+    if (!isDynamicFeed) return rawUrl;
 
     u.searchParams.set('host_mid', desiredHostMid);
     return u.toString();

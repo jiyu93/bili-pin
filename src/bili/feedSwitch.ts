@@ -11,6 +11,35 @@ function safeClick(el: HTMLElement | null): boolean {
   }
 }
 
+function setFilteredUiMid(mid: string | null) {
+  try {
+    const root = document.documentElement;
+    if (!mid) {
+      delete (root as any).dataset.biliPinFilteredMid;
+      return;
+    }
+    (root as any).dataset.biliPinFilteredMid = String(mid);
+  } catch {
+    // ignore
+  }
+}
+
+function triggerFeedReloadByTabs(): boolean {
+  const tabs = Array.from(
+    document.querySelectorAll<HTMLElement>('.bili-dyn-list-tabs__item'),
+  ).filter((x) => x.isConnected);
+  if (tabs.length < 2) return false;
+
+  const active = tabs.find((t) => t.classList.contains('active')) ?? null;
+  const other = tabs.find((t) => t !== active) ?? null;
+  if (!other) return false;
+
+  // 先切到另一个tab，确保触发请求；再切回“全部”(active) 以保持用户预期
+  if (!safeClick(other)) return false;
+  if (active) setTimeout(() => safeClick(active), 60);
+  return true;
+}
+
 /**
  * 在动态页内切换 feed 到指定 UP（mid）。
  *
@@ -25,6 +54,10 @@ export function switchFeedInDynamicPage(stripRoot: HTMLElement, mid: string): bo
   if (!/^\d+$/.test(m)) return false;
 
   setDesiredHostMid(m);
+  setFilteredUiMid(m);
+
+  // 0) 优先通过“全部/视频投稿/追番追剧/专栏”tab 触发刷新（最稳定：即使“全部动态”已被选中也会发请求）
+  if (triggerFeedReloadByTabs()) return true;
 
   // 1) 优先点击“全部动态”（重置/刷新最稳定）
   const allFace = stripRoot.querySelector<HTMLElement>('.bili-dyn-up-list__item__face.all');

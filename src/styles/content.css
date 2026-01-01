@@ -1,5 +1,10 @@
 /* bili-pin content styles */
 
+/* 置顶筛选模式：隐藏“全部/视频投稿/追番追剧/专栏”这行（原站：点某个UP后该行会消失） */
+html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
+  display: none !important;
+}
+
 /* 置顶栏 */
 .bili-pin-bar {
   width: 100%;

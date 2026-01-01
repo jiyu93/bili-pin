@@ -2,7 +2,7 @@ import { filterFeedDirectly } from '../bili/clickBridge';
 import { getPinnedUps, pinUp, unpinUp, type PinnedUp } from '../storage/pins';
 import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveUid } from './pinBar';
 import { showToast } from './toast';
-import { getUpInfoByFace } from '../bili/apiInterceptor';
+import { getUpInfoByFace, setDesiredHostMid } from '../bili/apiInterceptor';
 
 const BTN_CLASS = 'bili-pin-btn';
 const BTN_MARK = 'data-bili-pin-btn';
@@ -170,19 +170,31 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
  * 监听推荐列表的选中状态，同步高亮置顶栏
  */
 function observeRecommendationListSelection(stripRoot: HTMLElement): void {
-  // 监听推荐列表的点击事件
-  stripRoot.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    const item = target.closest<HTMLElement>('.bili-dyn-up-list__item');
-    if (!item) return;
+  // 关键：用 capture 阶段 + 只处理用户真实点击（isTrusted），
+  // 确保在B站自身click handler触发请求之前就清掉 desiredHostMid，
+  // 否则会出现“点推荐UP要点两次/甚至卡住”的现象。
+  stripRoot.addEventListener(
+    'click',
+    (e) => {
+      if (!e.isTrusted) return; // 我们自己 safeClick 触发的，不要干预
 
-    const mid = getItemMid(item);
-    if (!mid) return;
-    getPinnedUps().then((pinned) => {
-      const isPinned = pinned.some((p) => p.mid === mid);
-      if (isPinned) setActiveUid(mid);
-    });
-  });
+      const target = e.target as HTMLElement;
+      const item = target.closest<HTMLElement>('.bili-dyn-up-list__item');
+      if (!item) return;
+
+      // 用户手动点击了B站原生推荐横条：退出“置顶筛选(mid改写)”模式
+      setDesiredHostMid(null);
+      try {
+        delete (document.documentElement as any).dataset.biliPinFilteredMid;
+      } catch {
+        // ignore
+      }
+
+      // 为了避免“两个框都在抢高亮/状态”的混乱：只要用户改用推荐横条，就清空置顶栏高亮
+      setActiveUid(null);
+    },
+    true,
+  );
 }
 
 async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
