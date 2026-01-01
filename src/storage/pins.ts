@@ -1,4 +1,4 @@
-import { makeFaceKey, normalizeUid } from '../bili/faceKey';
+// 注意：本项目的“UP 唯一标识”使用 B 站 mid（数字字符串）
 
 export type PinnedUp = {
   uid: string;
@@ -13,12 +13,9 @@ function normalizeItem(item: PinnedUp): PinnedUp | null {
   const face = String(item.face ?? '').trim() || undefined;
   const baseUid = String(item.uid ?? '').trim();
 
-  // 只接受真实的数字uid（mid），不接受faceKey
-  if (!/^\d+$/.test(baseUid)) {
-    // 如果不是真实的数字mid，丢弃该项
-    console.warn('[bili-pin] discarding item without real mid', { uid: baseUid, name: item.name });
-    return null;
-  }
+  // 仅接受 mid（B 站用户 id，数字字符串）。
+  // 这样可以保证后续 feed 切换（host_mid）链路稳定可用。
+  if (!/^\d+$/.test(baseUid)) return null;
 
   // 这是真实的数字mid，直接使用
   return {
@@ -44,7 +41,7 @@ function sortPinned(list: PinnedUp[]): PinnedUp[] {
 }
 
 async function storageGet<T>(key: string, fallback: T): Promise<T> {
-  const chromeStorage = globalThis.chrome?.storage?.local;
+  const chromeStorage = (globalThis as any).chrome?.storage?.local;
   if (chromeStorage?.get) {
     return await new Promise<T>((resolve) => {
       chromeStorage.get({ [key]: fallback }, (result: Record<string, unknown>) => {
@@ -63,7 +60,7 @@ async function storageGet<T>(key: string, fallback: T): Promise<T> {
 }
 
 async function storageSet<T>(key: string, value: T): Promise<void> {
-  const chromeStorage = globalThis.chrome?.storage?.local;
+  const chromeStorage = (globalThis as any).chrome?.storage?.local;
   if (chromeStorage?.set) {
     await new Promise<void>((resolve) => {
       chromeStorage.set({ [key]: value }, () => resolve());
@@ -104,15 +101,15 @@ export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
 
 export async function isPinned(uid: string): Promise<boolean> {
   const list = await getPinnedUps();
-  const target = normalizeUid(String(uid ?? ''), undefined);
-  return list.some((x) => x.uid === target);
+  const target = String(uid ?? '').trim();
+  return /^\d+$/.test(target) && list.some((x) => x.uid === target);
 }
 
 export async function pinUp(input: Omit<PinnedUp, 'pinnedAt'> & { pinnedAt?: number }): Promise<PinnedUp[]> {
   const face = String(input.face ?? '').trim() || undefined;
   const inputUid = String(input.uid ?? '').trim();
   
-  // 只接受真实的数字uid（mid），不接受faceKey
+  // 只接受 mid（数字字符串）
   if (!/^\d+$/.test(inputUid)) {
     console.warn('[bili-pin] cannot pin UP without real mid', { uid: inputUid, name: input.name });
     throw new Error(`无法置顶：未获取到真实的UP ID。请确保该UP在推荐列表中，或等待页面加载完成后再试。`);
