@@ -61,7 +61,7 @@ async function chromeStorageSet<T>(key: string, value: T): Promise<void> {
 }
 
 export default defineContentScript({
-  matches: ['https://t.bilibili.com/*', 'https://space.bilibili.com/*'],
+  matches: ['https://t.bilibili.com/*', 'https://space.bilibili.com/*', 'https://www.bilibili.com/*'],
   runAt: 'document_start',
   world: 'ISOLATED',
   main() {

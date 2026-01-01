@@ -8,6 +8,7 @@
 - **选中高亮**：置顶栏选中态为蓝色圆环 + 蓝色文字（用 `box-shadow`，不抖动）
 - **图标**：图钉（Tabler outline/filled 两态），取消（Tabler x）
 - **个人空间主页** `https://space.bilibili.com/*`：在右上角“已关注”按钮的 hover 菜单里新增“置顶动态/取消置顶”，与动态页置顶数据完全共用
+- **视频播放页** `https://www.bilibili.com/video/*`：在右侧 UP 信息区“已关注”按钮的 hover 菜单里新增“置顶动态/取消置顶”，与动态页置顶数据完全共用
 
 ## 核心架构（为什么这样做）
 目标：**不碰 B 站前端状态机**，通过改写请求参数让 B 站自行渲染正确的 feed。
@@ -53,6 +54,12 @@
    - `clickBridge.filterFeedDirectly()` 仅调用 `switchFeedInDynamicPage()`
    - `feedSwitch` 为了“每次都触发请求”：优先点击一个**非 active** 的推荐 UP item，并轮换 index；必要时用其它兜底点击
 
+7. `entrypoints/video.content.ts` & `src/ui/videoFollowMenuPin.ts`
+   - `runAt: document_idle` + `world: 'ISOLATED'`
+   - 监听/扫描 `van-popover`（`.van-popover.van-popper`），识别包含“设置分组/取消关注”的菜单后，**克隆原生菜单项** 插入“置顶动态/取消置顶`
+     - 该菜单在当前 video 页结构中是：`ul.follow_dropdown > li`
+   - UP 信息：优先 `__INITIAL_STATE__.videoData.owner`，DOM 兜底（space 链接/昵称/头像）
+
 ## 样式与交互（UI 要点）
 - `src/styles/content.css`
   - `html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs { display:none }`：置顶筛选态隐藏 tabs
@@ -77,6 +84,7 @@
 - 连续切换置顶栏多个 UP：每次都触发切换，不出现“第二次没反应”
 - 打开任意 UP 个人空间主页：hover 右上角“已关注”→ 菜单里出现“置顶动态/取消置顶”（优先位于“设置分组”上方）；点击可写入/移除置顶数据（刷新动态页可见同步）
 - space 页置顶后：动态页置顶栏昵称/头像显示正确（不是签名；头像不丢失）
+- 打开任意视频播放页：hover 右侧 UP 信息区“已关注”→ 菜单里出现“置顶动态/取消置顶”（优先位于“设置分组”上方）；点击可写入/移除置顶数据（刷新动态页可见同步）
 
 ## 待办（优先级从高到低）
 - 拖拽排序（`pinBar.ts` + `pins.ts` 增加顺序字段）
