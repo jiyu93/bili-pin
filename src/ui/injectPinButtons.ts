@@ -62,6 +62,46 @@ function findUpItems(stripRoot: HTMLElement): HTMLElement[] {
   return items.filter((el) => !el.querySelector('.bili-dyn-up-list__item__face.all'));
 }
 
+function syncPinBarSizingFromBili(stripRoot: HTMLElement, bar: HTMLElement): void {
+  // 以推荐横条的一个样本 item 的实际渲染尺寸为准，避免“置顶栏更小/省略号放不下”等问题
+  const sample = findUpItems(stripRoot)[0] ?? null;
+  if (!sample) return;
+
+  // 注意：CSS 变量实际由 list 使用，因此要写到 list 上（否则可能被 list 上的默认值覆盖）
+  const listEl = bar.querySelector<HTMLElement>('#bili-pin-pinbar-list') ?? bar;
+
+  const itemRect = sample.getBoundingClientRect();
+  if (itemRect.width > 10) {
+    listEl.style.setProperty('--bili-pin-item-width', `${itemRect.width}px`);
+  }
+
+  const faceEl =
+    sample.querySelector<HTMLElement>('.bili-dyn-up-list__item__face') ??
+    sample.querySelector<HTMLElement>('.bili-dyn-up-list__item__face__img') ??
+    null;
+  const faceRect = faceEl?.getBoundingClientRect() ?? null;
+  const faceSize = faceRect ? Math.max(faceRect.width, faceRect.height) : 0;
+  if (faceSize > 10) {
+    listEl.style.setProperty('--bili-pin-face-size', `${faceSize}px`);
+  }
+
+  const nameEl = sample.querySelector<HTMLElement>('.bili-dyn-up-list__item__name') ?? null;
+  if (nameEl) {
+    const cs = getComputedStyle(nameEl);
+    const fontSize = parseFloat(cs.fontSize || '0');
+    const lineHeightRaw = cs.lineHeight === 'normal' ? NaN : parseFloat(cs.lineHeight || '0');
+    const lineHeight = Number.isFinite(lineHeightRaw) && lineHeightRaw > 0 ? lineHeightRaw : (fontSize ? fontSize * 1.3 : 16);
+    if (fontSize > 0) listEl.style.setProperty('--bili-pin-name-font-size', `${fontSize}px`);
+    if (lineHeight > 0) listEl.style.setProperty('--bili-pin-name-line-height', `${lineHeight}px`);
+    // 置顶栏支持两行
+    listEl.style.setProperty('--bili-pin-name-lines', '2');
+    listEl.style.setProperty('--bili-pin-name-max-height', `${lineHeight * 2}px`);
+
+    const collapsed = (faceSize || 44) + 6 + (lineHeight * 2) + 12;
+    listEl.style.setProperty('--bili-pin-collapsed-max-height', `${collapsed}px`);
+  }
+}
+
 function ensureHostPositioning(host: HTMLElement) {
   const cs = getComputedStyle(host);
   if (cs.position === 'static') host.style.position = 'relative';
@@ -81,7 +121,12 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
   for (const item of items) {
     let mid = getItemMid(item);
     
-    const host = item;
+    // 按“头像圆形容器”定位按钮：与B站原生推荐栏对齐（右上角）
+    const faceHost =
+      item.querySelector<HTMLElement>('.bili-dyn-up-list__item__face') ??
+      item.querySelector<HTMLElement>('.bili-dyn-up-list__item__face__img') ??
+      null;
+    const host = faceHost ?? item;
 
     // 标记host避免重复注入
     if (host.getAttribute(HOST_MARK) === '1') {
@@ -249,6 +294,7 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
   const pinnedSet = new Set(pinned.map((x) => x.mid));
 
   const bar = ensurePinBar(stripRoot);
+  syncPinBarSizingFromBili(stripRoot, bar);
   await ensurePinBarPrefs(bar);
   renderPinBar(bar, pinned, {
     onClickMid: async (mid) => {

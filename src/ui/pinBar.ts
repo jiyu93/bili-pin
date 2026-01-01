@@ -218,6 +218,9 @@ export function renderPinBar(
     main.type = 'button';
     main.className = 'bili-pin-bar__itemMain';
 
+    const faceWrap = document.createElement('div');
+    faceWrap.className = 'bili-pin-bar__faceWrap';
+
     const img = document.createElement('img');
     img.className = 'bili-pin-bar__face';
     img.alt = up.name ?? up.mid;
@@ -227,7 +230,7 @@ export function renderPinBar(
     name.className = 'bili-pin-bar__name';
     name.textContent = up.name ?? up.mid;
 
-    main.appendChild(img);
+    faceWrap.appendChild(img);
     main.appendChild(name);
 
     main.addEventListener('click', (e) => {
@@ -254,9 +257,10 @@ export function renderPinBar(
       e.stopPropagation();
       handlers.onUnpinMid?.(up.mid);
     });
+    faceWrap.appendChild(unpin);
 
+    main.prepend(faceWrap);
     item.appendChild(main);
-    item.appendChild(unpin);
     list.appendChild(item);
   }
 

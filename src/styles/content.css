@@ -14,6 +14,14 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
+  /* 这些是“兜底默认值”：真正的尺寸会在运行时从 B 站推荐栏同步并覆盖 */
+  --bili-pin-item-width: 72px;
+  --bili-pin-face-size: 44px;
+  --bili-pin-name-font-size: 12px;
+  --bili-pin-name-line-height: 16px;
+  --bili-pin-name-lines: 2;
+  --bili-pin-name-max-height: 32px;
+  --bili-pin-collapsed-max-height: 88px;
 }
 
 .bili-pin-bar__header {
@@ -60,9 +68,8 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 }
 
 .bili-pin-bar__list {
-  --bili-pin-collapsed-max-height: 72px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, 72px);
+  grid-template-columns: repeat(auto-fill, var(--bili-pin-item-width));
   gap: 14px;
   justify-content: start;
   overflow: hidden;
@@ -85,25 +92,31 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 
 .bili-pin-bar__item {
   position: relative;
-  width: 72px;
+  width: var(--bili-pin-item-width);
 }
 
 .bili-pin-bar__itemMain {
   display: grid;
-  grid-template-rows: 44px auto;
+  grid-template-rows: var(--bili-pin-face-size) auto;
   justify-items: center;
   gap: 6px;
-  width: 72px;
+  width: var(--bili-pin-item-width);
   border: none;
   background: transparent;
   cursor: pointer;
   padding: 0;
 }
 
+.bili-pin-bar__faceWrap {
+  position: relative;
+  width: var(--bili-pin-face-size);
+  height: var(--bili-pin-face-size);
+}
+
 .bili-pin-bar__unpin {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -6px;
+  right: -6px;
   z-index: 2;
   width: 22px;
   height: 22px;
@@ -147,28 +160,34 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 }
 
 .bili-pin-bar__face {
-  width: 44px;
-  height: 44px;
+  width: var(--bili-pin-face-size);
+  height: var(--bili-pin-face-size);
   border-radius: 50%;
   object-fit: cover;
   background: rgba(0, 0, 0, 0.04);
 }
 
 .bili-pin-bar__name {
-  font-size: 12px;
+  font-size: var(--bili-pin-name-font-size);
+  line-height: var(--bili-pin-name-line-height);
   color: rgba(0, 0, 0, 0.7);
-  width: 72px;
+  width: var(--bili-pin-item-width);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
   text-align: center;
   transition: color 200ms ease;
+  display: -webkit-box;
+  line-clamp: var(--bili-pin-name-lines);
+  -webkit-line-clamp: var(--bili-pin-name-lines);
+  -webkit-box-orient: vertical;
+  max-height: var(--bili-pin-name-max-height);
 }
 
 /* 高亮状态：选中时的蓝色圆框和蓝色文字 */
 .bili-pin-bar__item.is-active .bili-pin-bar__face {
-  border: 2px solid #00a1d6;
-  box-shadow: 0 0 0 1px rgba(0, 161, 214, 0.2);
+  /* 用 box-shadow 画圆环，避免 border 改变元素尺寸导致“选中时变大/抖动” */
+  box-shadow: 0 0 0 2px #00a1d6, 0 0 0 3px rgba(0, 161, 214, 0.2);
 }
 
 .bili-pin-bar__item.is-active .bili-pin-bar__name {
@@ -179,8 +198,8 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 /* 关注UP推荐列表上的“置顶/已置顶”按钮 */
 .bili-pin-btn {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -6px;
+  right: -6px;
   z-index: 10;
   width: 22px;
   height: 22px;
