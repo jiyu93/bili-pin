@@ -1,0 +1,19 @@
+{
+  "name": "bili-pin",
+  "version": "0.0.1",
+  "description": "Bilibili 动态页置顶UP（浏览器扩展）",
+  "private": true,
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "prepare": "wxt prepare"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "wxt": "^0.20.13"
+  }
+}

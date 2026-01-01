@@ -1,0 +1,81 @@
+/* bili-pin content styles */
+
+/* 置顶栏 */
+.bili-pin-bar {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+}
+
+.bili-pin-bar__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.75);
+  margin-bottom: 8px;
+}
+
+.bili-pin-bar__list {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.bili-pin-bar__empty {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+  padding: 6px 0;
+}
+
+.bili-pin-bar__item {
+  display: grid;
+  grid-template-rows: 44px auto;
+  gap: 6px;
+  min-width: 60px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.bili-pin-bar__face {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.bili-pin-bar__name {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.7);
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 原头像条上的“置顶/已置顶”按钮 */
+.bili-pin-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 10;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.75);
+  cursor: pointer;
+}
+
+.bili-pin-btn.is-pinned {
+  border-color: rgba(0, 160, 255, 0.4);
+  color: rgba(0, 120, 200, 0.95);
+}
+
+
