@@ -1,5 +1,5 @@
 # Bili Pin（PRD）
-一个Bilibili专用的Chorme插件，主要用途是在网页版的"动态"页面https://t.bilibili.com/ 增加一个"置顶up主"功能
+一个Bilibili专用的Chorme插件，主要用途是在网页版的"动态"页面https://t.bilibili.com/ 增加一个"置顶动态主"功能
 
 
 ## 背景
