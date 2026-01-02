@@ -59,6 +59,33 @@ function rewriteHostMidIfNeeded(rawUrl: string): string {
 }
 
 /**
+ * 从 uplist 接口响应中提取UP列表（加载更多）
+ * 结构推测：data.items[] -> { mid, name, face }
+ */
+function extractUpInfoFromUpListResponse(data: any): UpInfo[] {
+  const ups: UpInfo[] = [];
+  try {
+    const d = unwrapData(data);
+    // 尝试多种可能的列表字段: data.items, data.list, 或者 data 本身就是数组
+    const items = d?.items ?? d?.list ?? (Array.isArray(d) ? d : null);
+    if (Array.isArray(items)) {
+      for (const up of items) {
+        const mid = up?.mid ?? up?.uid;
+        const face = up?.face ?? up?.avatar;
+        const name = up?.name ?? up?.uname ?? up?.title ?? '';
+        const hasUpdate = !!(up?.has_update ?? 0);
+        if (mid && face) {
+          ups.push({ mid: String(mid), face: String(face), name: String(name ?? ''), has_update: hasUpdate });
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[bili-pin] failed to extract UP info from uplist response', error);
+  }
+  return ups;
+}
+
+/**
  * 从 portal 接口响应中提取推荐UP横条 up_list（你截图里的接口）
  * 典型结构：data.up_list.items[] -> { mid, name, face }
  */
@@ -163,21 +190,29 @@ function extractUpInfoFromFeedResponse(data: any): UpInfo[] {
 function processApiResponse(url: string, responseData: any): void {
   try {
     const isPortal = url.includes('/x/polymer/web-dynamic/v1/portal');
+    const isUpList = url.includes('/x/polymer/web-dynamic/v1/uplist');
     const isFeed = url.includes('/x/polymer/web-dynamic/v1/feed/');
     const isRelation = url.includes('/x/relation/followings') || url.includes('/x/relation/fans') || url.includes('/x/relation/tag');
 
-    if (!isPortal && !isFeed && !isRelation) return;
+    if (!isPortal && !isUpList && !isFeed && !isRelation) return;
 
     let ups: UpInfo[] = [];
     if (isPortal) {
       ups = extractUpInfoFromPortalResponse(responseData);
+    } else if (isUpList) {
+      ups = extractUpInfoFromUpListResponse(responseData);
     } else if (isRelation) {
       ups = extractUpInfoFromRelationResponse(responseData);
     } else {
       ups = extractUpInfoFromFeedResponse(responseData);
     }
 
-    if (isPortal && ups.length) lastPortalUpList = ups;
+    if (isPortal && ups.length) {
+      lastPortalUpList = ups;
+    } else if (isUpList && ups.length) {
+      // 追加到 lastPortalUpList 以便 getUpInfoByName 能查到
+      lastPortalUpList = [...lastPortalUpList, ...ups];
+    }
 
     // 缓存UP信息（用头像 hash 做关联，用于把“DOM里的头像”映射到 “portal给的mid”）
     for (const up of ups) {
@@ -199,7 +234,7 @@ function processApiResponse(url: string, responseData: any): void {
     }
 
     // 通知 UI：portal up_list 已 ready（让按钮重算 mid 映射）
-    if (isPortal) {
+    if (isPortal || isUpList) {
       window.dispatchEvent(
         new CustomEvent('bili-pin:portal-up-list', {
           detail: { count: ups.length },
