@@ -34,20 +34,25 @@
    - `observeUpAvatarStrip(...)` 找到推荐横条根节点后调用 `injectPinUi()`
 
 2. `entrypoints/space.content.ts`
-   - `runAt: document_idle` + `world: 'ISOLATED'`（可直接访问 `chrome.storage.local`）
+   - `runAt: document_start` + `world: 'MAIN'`
+   - **为何改 MAIN World**：为了拦截 `x/relation/followings` 等 API 请求以获取准确的粉丝/关注列表用户信息（昵称/头像），修复在粉丝列表置顶时误取 Space 主人信息的 Bug。
+   - `initApiInterceptor()`：初始化 API 拦截。
+   - `observeSpacePage()`：监听 DOM 注入菜单。由于 `document_start` 时 body 可能未就绪，内部已做 `DOMContentLoaded` 等待。
    - 监听 `body` 直接子节点新增的 `.vui_popover`（teleport 弹层容器），找到其中的 `.menu-popover__panel` 后插入一条 `.menu-popover__panel-item`
      - **位置**：优先放在“设置分组”上方，其次“取消关注”上方
      - **样式**：克隆一条原生菜单项作为模板（scoped CSS 需要 `data-v-*` 等属性），避免出现“字体颜色/hover 背景不一致”
      - **响应式更新**：通过 `onPinsChange` 监听数据变化，实时更新当前已打开菜单项的文案。
+     - **目标识别**：通过 `mouseover` 监听器追踪最近悬停的列表项（`.list-item` / `.fans-card-item` 等），结合 API 缓存（`getUpInfoByMid`）确保置顶的是列表中的 UP 而不是 Space 主人。
 
 3. `entrypoints/storageBridge.content.ts`
    - `runAt: document_start` + `world: 'ISOLATED'`
-   - 提供 `window.postMessage` 的 storage bridge：给 MAIN world 代码转发 `chrome.storage.local.get/set`
+   - 提供 `window.postMessage` 的 storage bridge：给 MAIN world 代码（现在包括 space 页）转发 `chrome.storage.local.get/set`
 
 4. `src/bili/apiInterceptor.ts`
    - 拦截 `fetch`/`XHR`
    - 解析 `/x/polymer/web-dynamic/v1/portal` 的 `up_list.items[]`，缓存 `mid/name/face`
-    - 解析 `/x/polymer/web-dynamic/v1/feed/*` 的 `items[].modules.module_author`（含少量兜底结构），同样缓存 `mid/name/face`
+   - 解析 `/x/polymer/web-dynamic/v1/feed/*` 的 `items[].modules.module_author`，缓存 `mid/name/face`
+   - **新增**：解析 `/x/relation/followings` 和 `/x/relation/fans` 的 `list[]`，缓存粉丝/关注列表的 `mid/name/face`。
    - 若设置了 `desiredHostMid`：改写 `feed/*` 的 `host_mid`
    - 同步 UI：`desiredHostMid` ↔ `html[data-bili-pin-filtered-mid]`（用于隐藏 tabs）
 

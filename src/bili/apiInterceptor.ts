@@ -85,6 +85,31 @@ function extractUpInfoFromPortalResponse(data: any): UpInfo[] {
 }
 
 /**
+ * 从 x/relation/followings 或 x/relation/fans 接口响应中提取用户信息
+ * 结构通常是: data.list[] -> { mid, uname, face, ... }
+ */
+function extractUpInfoFromRelationResponse(data: any): UpInfo[] {
+  const ups: UpInfo[] = [];
+  try {
+    const d = unwrapData(data);
+    const list = d?.list ?? d?.items ?? null;
+    if (Array.isArray(list)) {
+      for (const up of list) {
+        const mid = up?.mid ?? up?.uid;
+        const face = up?.face ?? up?.avatar;
+        const name = up?.uname ?? up?.name ?? '';
+        if (mid && face) {
+          ups.push({ mid: String(mid), face: String(face), name: String(name ?? '') });
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[bili-pin] failed to extract UP info from relation response', error);
+  }
+  return ups;
+}
+
+/**
  * 从 feed/* 接口响应中提取作者信息（用于动态流卡片：三点菜单等场景经常拿不到 space 链接）
  * 常见结构：data.items[].modules.module_author -> { mid, name/uname, face }
  * 也可能存在转发/引用：orig.modules.module_author 或 desc.user_profile.info
@@ -137,9 +162,19 @@ function processApiResponse(url: string, responseData: any): void {
   try {
     const isPortal = url.includes('/x/polymer/web-dynamic/v1/portal');
     const isFeed = url.includes('/x/polymer/web-dynamic/v1/feed/');
-    if (!isPortal && !isFeed) return;
+    const isRelation = url.includes('/x/relation/followings') || url.includes('/x/relation/fans') || url.includes('/x/relation/tag');
 
-    const ups = isPortal ? extractUpInfoFromPortalResponse(responseData) : extractUpInfoFromFeedResponse(responseData);
+    if (!isPortal && !isFeed && !isRelation) return;
+
+    let ups: UpInfo[] = [];
+    if (isPortal) {
+      ups = extractUpInfoFromPortalResponse(responseData);
+    } else if (isRelation) {
+      ups = extractUpInfoFromRelationResponse(responseData);
+    } else {
+      ups = extractUpInfoFromFeedResponse(responseData);
+    }
+
     if (isPortal && ups.length) lastPortalUpList = ups;
 
     // 缓存UP信息（用头像 hash 做关联，用于把“DOM里的头像”映射到 “portal给的mid”）
