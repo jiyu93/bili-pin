@@ -27,7 +27,7 @@
 
 1. **获取代码**
    ```bash
-   git clone https://github.com/your-username/bili-pin.git
+   git clone https://github.com/jiyu93/bili-pin.git
    cd bili-pin
    ```
 

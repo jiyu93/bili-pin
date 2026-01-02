@@ -11,6 +11,10 @@
   },
   "keywords": [],
   "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jiyu93/bili-pin.git"
+  },
   "license": "MIT",
   "type": "module",
   "devDependencies": {
