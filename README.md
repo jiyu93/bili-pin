@@ -1,6 +1,8 @@
-# Bili Pin
-
-一个轻量级的 Bilibili 浏览器扩展，置顶你的宝藏UP主，解决“关注了但错过动态乃至遗忘了曾经喜欢的UP主”的烦恼。
+<div align="center">
+  <img src="public/icons/icon.svg" width="120" height="120" alt="Bili Pin Logo" />
+  <h1>Bili Pin</h1>
+  <p>一个轻量级的 Bilibili 浏览器扩展，置顶你的宝藏UP主，解决“关注了但错过动态乃至遗忘了曾经喜欢的UP主”的烦恼。</p>
+</div>
 
 ## ✨ 主要功能
 
