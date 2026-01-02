@@ -42,7 +42,21 @@ function isRequest(data: unknown): data is BridgeRequest {
   return d.__biliPin === 1 && (d.kind === 'storage:get' || d.kind === 'storage:set') && typeof d.requestId === 'string';
 }
 
+
+const ALLOWED_KEYS = [
+  'biliPin.pins.v1',
+  'biliPin.ui.pinBarExpanded.v1'
+];
+
+function isAllowedKey(key: string): boolean {
+  // 必须是 biliPin. 开头，防止污染其他数据
+  return key.startsWith('biliPin.') && ALLOWED_KEYS.includes(key);
+}
+
 async function chromeStorageGet<T>(key: string, fallback: T): Promise<T> {
+  if (!isAllowedKey(key)) {
+    throw new Error(`Access denied: key "${key}" is not allowed`);
+  }
   const chromeStorage = (globalThis as any).chrome?.storage?.local;
   if (!chromeStorage?.get) throw new Error('chrome.storage.local not available');
   return await new Promise<T>((resolve) => {
@@ -53,6 +67,9 @@ async function chromeStorageGet<T>(key: string, fallback: T): Promise<T> {
 }
 
 async function chromeStorageSet<T>(key: string, value: T): Promise<void> {
+  if (!isAllowedKey(key)) {
+    throw new Error(`Access denied: key "${key}" is not allowed`);
+  }
   const chromeStorage = (globalThis as any).chrome?.storage?.local;
   if (!chromeStorage?.set) throw new Error('chrome.storage.local not available');
   await new Promise<void>((resolve) => {
