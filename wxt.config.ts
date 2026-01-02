@@ -5,7 +5,7 @@ export default defineConfig({
   manifest: {
     name: 'Bili Pin',
     version: '1.0.0',
-    description: '在B站动态页添加置顶动态头像栏',
+    description: '一个轻量级的 Bilibili 浏览器扩展，置顶你的宝藏UP主',
     permissions: ['storage'],
     host_permissions: [
       'https://t.bilibili.com/*',
