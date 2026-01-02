@@ -15,6 +15,10 @@ function formatTime(timestamp: number): string {
 }
 
 export function observeFollowTime(): void {
+  const root = document.documentElement;
+  if (!root || root.getAttribute('data-bili-pin-follow-time-installed') === '1') return;
+  root.setAttribute('data-bili-pin-follow-time-installed', '1');
+
   const check = () => {
     // 适配新的 DOM 结构：.relation-card
     // 注意：.relation-card 可能是 li 的子元素，也可能是直接的列表项

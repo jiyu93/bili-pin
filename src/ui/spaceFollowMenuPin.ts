@@ -192,6 +192,10 @@ function tryInjectIntoPanels(panels: HTMLElement[]): void {
 let lastHoveredListTime = 0;
 
 export function observeSpacePage(): void {
+  const root = document.documentElement;
+  if (!root || root.getAttribute('data-bili-pin-space-menu-installed') === '1') return;
+  root.setAttribute('data-bili-pin-space-menu-installed', '1');
+
   // 监听置顶列表变化，同步更新当前打开的菜单项状态
   onPinsChange(() => {
     const items = document.querySelectorAll<HTMLElement>(`[${MENU_ITEM_MARK}="1"]`);
@@ -259,10 +263,6 @@ export function observeSpacePage(): void {
           lastHoveredListTime = Date.now();
       }
   }, { passive: true });
-
-  const root = document.documentElement;
-  if (!root || root.getAttribute('data-bili-pin-space-menu-installed') === '1') return;
-  root.setAttribute('data-bili-pin-space-menu-installed', '1');
 
   // 第一性原理：菜单不打开时没有 DOM，所以“注入菜单”就是“菜单 DOM 出现时自动补一项”。
   // 这里不依赖 hover/click 事件，只监听 body **直接子节点**新增的 popover（teleport 容器），避免监听 subtree 导致卡顿。

@@ -238,6 +238,10 @@ function scanListRoot(listRoot: HTMLElement): void {
 }
 
 export function observeDynamicFeedMoreMenu(): void {
+  const root = document.documentElement;
+  if (!root || root.getAttribute('data-bili-pin-dyn-more-installed') === '1') return;
+  root.setAttribute('data-bili-pin-dyn-more-installed', '1');
+
   // 监听置顶列表变化，同步更新当前打开的菜单项状态
   onPinsChange(() => {
     const items = document.querySelectorAll<HTMLElement>(`[${MENU_ITEM_MARK}="1"]`);
@@ -246,10 +250,6 @@ export function observeDynamicFeedMoreMenu(): void {
       if (mid) updateMenuItemText(item, mid).catch(() => {});
     });
   });
-
-  const root = document.documentElement;
-  if (!root || root.getAttribute('data-bili-pin-dyn-more-installed') === '1') return;
-  root.setAttribute('data-bili-pin-dyn-more-installed', '1');
 
   let listRoot: HTMLElement | null = null;
   let listObserver: MutationObserver | null = null;

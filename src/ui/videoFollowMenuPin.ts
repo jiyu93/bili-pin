@@ -171,6 +171,10 @@ function scanAndHook(): void {
 }
 
 export function observeVideoFollowMenu(): void {
+  const root = document.documentElement;
+  if (!root || root.getAttribute('data-bili-pin-video-follow-installed') === '1') return;
+  root.setAttribute('data-bili-pin-video-follow-installed', '1');
+
   // 监听置顶列表变化，同步更新当前打开的菜单项状态
   onPinsChange(() => {
     const items = document.querySelectorAll<HTMLElement>(`[${MENU_ITEM_MARK}="1"]`);
@@ -179,10 +183,6 @@ export function observeVideoFollowMenu(): void {
       if (mid) updateMenuItemText(item, mid).catch(() => {});
     });
   });
-
-  const root = document.documentElement;
-  if (!root || root.getAttribute('data-bili-pin-video-follow-installed') === '1') return;
-  root.setAttribute('data-bili-pin-video-follow-installed', '1');
 
   // 初次扫描
   scanAndHook();
