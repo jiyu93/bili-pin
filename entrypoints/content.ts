@@ -12,7 +12,7 @@ export default defineContentScript({
   // 关键：在 MAIN world 运行，才能拦截页面自身发出的 fetch/xhr（隔离世界改 window.fetch 没用）
   world: 'MAIN',
   main() {
-    // 注入样式（inline模式，确保Dark Reader能识别）
+    // 注入样式（inline模式）
     injectStyleTag(contentStyles, 'bili-pin-content-style');
 
     // 尽早初始化API拦截器，在页面加载API请求之前
