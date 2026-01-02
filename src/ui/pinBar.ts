@@ -223,15 +223,6 @@ export function renderPinBar(
     delete (list as any)._sortable;
   }
 
-  if (pinned.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'bili-pin-bar__empty';
-    empty.textContent = '还没有置顶，去头像列表点"置顶"吧';
-    list.appendChild(empty);
-    requestAnimationFrame(() => updatePinBarCollapse(bar));
-    return;
-  }
-
   // 初始化 Sortable
   (list as any)._sortable = new Sortable(list, {
     animation: 250, // 动画时间
