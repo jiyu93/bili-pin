@@ -1,4 +1,4 @@
-import { isPinned, pinUp, unpinUp } from '../storage/pins';
+import { isPinned, pinUp, unpinUp, onPinsChange } from '../storage/pins';
 import { showToast } from './toast';
 
 // Vant popover（video 播放页“已关注”按钮）
@@ -99,6 +99,7 @@ function ensureMenuItemInFollowDropdown(ul: HTMLElement): void {
   // 关键：克隆原生 li，继承样式/作用域属性（data-v-*）
   const item = template.cloneNode(true) as HTMLElement;
   item.setAttribute(MENU_ITEM_MARK, '1');
+  item.dataset.mid = mid; // 存储 mid
   item.textContent = '';
 
   let busy = false;
@@ -170,6 +171,15 @@ function scanAndHook(): void {
 }
 
 export function observeVideoFollowMenu(): void {
+  // 监听置顶列表变化，同步更新当前打开的菜单项状态
+  onPinsChange(() => {
+    const items = document.querySelectorAll<HTMLElement>(`[${MENU_ITEM_MARK}="1"]`);
+    items.forEach((item) => {
+      const mid = item.dataset.mid;
+      if (mid) updateMenuItemText(item, mid).catch(() => {});
+    });
+  });
+
   const root = document.documentElement;
   if (!root || root.getAttribute('data-bili-pin-video-follow-installed') === '1') return;
   root.setAttribute('data-bili-pin-video-follow-installed', '1');

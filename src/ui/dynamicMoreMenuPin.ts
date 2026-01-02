@@ -1,4 +1,4 @@
-import { isPinned, pinUp, unpinUp } from '../storage/pins';
+import { isPinned, pinUp, unpinUp, onPinsChange } from '../storage/pins';
 import { showToast } from './toast';
 import { getUpInfoByFace } from '../bili/apiInterceptor';
 
@@ -137,6 +137,7 @@ function ensureMenuItemInOptions(
   // 关键：克隆原生菜单项，继承 B 站 scoped 样式（data-v-*）与 hover 效果
   const item = template.cloneNode(true) as HTMLElement;
   item.setAttribute(MENU_ITEM_MARK, '1');
+  item.dataset.mid = mid; // 存储 mid 以便后续更新
 
   // 清空文本（克隆会复制原 label）
   const label = item.querySelector<HTMLElement>(OPTION_LABEL_SELECTOR) ?? item;
@@ -237,6 +238,15 @@ function scanListRoot(listRoot: HTMLElement): void {
 }
 
 export function observeDynamicFeedMoreMenu(): void {
+  // 监听置顶列表变化，同步更新当前打开的菜单项状态
+  onPinsChange(() => {
+    const items = document.querySelectorAll<HTMLElement>(`[${MENU_ITEM_MARK}="1"]`);
+    items.forEach((item) => {
+      const mid = item.dataset.mid;
+      if (mid) updateMenuItemText(item, mid).catch(() => {});
+    });
+  });
+
   const root = document.documentElement;
   if (!root || root.getAttribute('data-bili-pin-dyn-more-installed') === '1') return;
   root.setAttribute('data-bili-pin-dyn-more-installed', '1');

@@ -1,4 +1,4 @@
-import { isPinned, pinUp, unpinUp } from '../storage/pins';
+import { isPinned, pinUp, unpinUp, onPinsChange } from '../storage/pins';
 import { showToast } from './toast';
 
 // hover 菜单弹层（teleport 到 body 下）
@@ -80,6 +80,7 @@ function ensureMenuItem(panel: HTMLElement, mid: string): void {
   // clone 后可能带有其它 class，但必须至少包含 panel-item class
   if (!item.classList.contains('menu-popover__panel-item')) item.classList.add('menu-popover__panel-item');
   item.setAttribute(MENU_ITEM_MARK, '1');
+  item.dataset.mid = mid;
   // 清空原文本（clone 会复制原有文本节点）
   item.textContent = '';
 
@@ -137,6 +138,15 @@ function tryInjectIntoPanels(panels: HTMLElement[]): void {
 }
 
 export function observeSpacePage(): void {
+  // 监听置顶列表变化，同步更新当前打开的菜单项状态
+  onPinsChange(() => {
+    const items = document.querySelectorAll<HTMLElement>(`[${MENU_ITEM_MARK}="1"]`);
+    items.forEach((item) => {
+      const mid = item.dataset.mid;
+      if (mid) updateMenuItemText(item, mid).catch(() => {});
+    });
+  });
+
   const root = document.documentElement;
   if (!root || root.getAttribute('data-bili-pin-space-menu-installed') === '1') return;
   root.setAttribute('data-bili-pin-space-menu-installed', '1');

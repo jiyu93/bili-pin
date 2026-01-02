@@ -38,6 +38,7 @@
    - 监听 `body` 直接子节点新增的 `.vui_popover`（teleport 弹层容器），找到其中的 `.menu-popover__panel` 后插入一条 `.menu-popover__panel-item`
      - **位置**：优先放在“设置分组”上方，其次“取消关注”上方
      - **样式**：克隆一条原生菜单项作为模板（scoped CSS 需要 `data-v-*` 等属性），避免出现“字体颜色/hover 背景不一致”
+     - **响应式更新**：通过 `onPinsChange` 监听数据变化，实时更新当前已打开菜单项的文案。
 
 3. `entrypoints/storageBridge.content.ts`
    - `runAt: document_start` + `world: 'ISOLATED'`
@@ -56,6 +57,7 @@
    - 渲染置顶栏：`renderPinBar(...)`
    - **昵称/头像纠错**：渲染前按 `mid` 用 portal 缓存回填 `name/face` 并写回 pins（修复 space 页曾误取签名/头像的历史脏数据）
    - 退出筛选态：用户点击推荐横条/tabs（capture + `e.isTrusted`）时清空 `desiredHostMid`
+   - **响应式更新**：通过 `onPinsChange` 监听数据变化，自动重新渲染 Pin Bar 和推荐栏按钮。
    - **特殊处理（Bug修复）**：当用户点击推荐栏中处于 active 状态的“全部动态”时，若此前处于“置顶劫持状态”（UI 欺骗），则通过 `forceReloadAllFeed` 强制触发一次“切换再切回”的动作，以确保 B 站真正加载全部动态内容。
 
 6. `src/bili/feedSwitch.ts` & `src/bili/clickBridge.ts`
@@ -68,6 +70,7 @@
    - 监听/扫描 `van-popover`（`.van-popover.van-popper`），识别包含“设置分组/取消关注”的菜单后，**克隆原生菜单项** 插入“置顶动态/取消置顶`
      - 该菜单在当前 video 页结构中是：`ul.follow_dropdown > li`
    - UP 信息：优先 `__INITIAL_STATE__.videoData.owner`，DOM 兜底（space 链接/昵称/头像）
+   - **响应式更新**：通过 `onPinsChange` 监听数据变化，实时更新当前已打开菜单项的文案。
 
 8. `src/ui/dynamicMoreMenuPin.ts`
    - 动态流卡片右上角 `.bili-dyn-more__btn` 打开菜单（包含“取消关注/举报”）后注入“置顶动态/取消置顶”
@@ -77,6 +80,7 @@
      - 卡片内 `a[href*="space.bilibili.com/"]`
      - 否则用头像 URL 通过 `apiInterceptor` 的缓存（portal/feed 响应）反查 mid
    - hover 体验：菜单与按钮之间存在 hover 断档，使用 `data-bili-pin-more-hover-bridge` + CSS `::before` 做透明桥接，避免菜单闪烁
+   - **响应式更新**：通过 `onPinsChange` 监听数据变化，实时更新当前已打开菜单项的文案。
 
 ## 样式与交互（UI 要点）
 - `src/styles/content.css`
@@ -97,6 +101,7 @@
 - `src/storage/pins.ts`
   - 仅以真实数字 `mid` 作为身份
   - 兼容旧字段（历史 `uid`）并迁移
+  - **事件通知**：提供 `onPinsChange`，在 `setPinnedUps` 后广播最新数据，驱动全站 UI 实时同步。
 
 ## 依赖变化
 - 新增 `sortablejs`：用于实现丝滑的拖拽排序动画（替换原生 Drag API 实现）

@@ -187,10 +187,33 @@ export async function getPinnedUps(): Promise<PinnedUp[]> {
   return next;
 }
 
+// 事件监听
+type PinsChangeListener = (pins: PinnedUp[]) => void;
+const listeners = new Set<PinsChangeListener>();
+
+export function onPinsChange(callback: PinsChangeListener): () => void {
+  listeners.add(callback);
+  return () => listeners.delete(callback);
+}
+
+function notifyListeners(pins: PinnedUp[]) {
+  for (const cb of listeners) {
+    try {
+      cb(pins);
+    } catch (e) {
+      console.error('[bili-pin] error in pins listener', e);
+    }
+  }
+}
+
 export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
   const raw = Array.isArray(list) ? list : [];
   const normalized = raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[];
-  await storageSet(STORAGE_KEY, uniqByUid(normalized));
+  const next = uniqByUid(normalized);
+  await storageSet(STORAGE_KEY, next);
+  
+  // 通知监听器
+  notifyListeners(next);
 }
 
 export async function isPinned(mid: string): Promise<boolean> {

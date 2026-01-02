@@ -1,5 +1,5 @@
 import { filterFeedDirectly } from '../bili/clickBridge';
-import { getPinnedUps, pinUp, setPinnedUps, unpinUp, type PinnedUp } from '../storage/pins';
+import { getPinnedUps, pinUp, setPinnedUps, unpinUp, onPinsChange, type PinnedUp } from '../storage/pins';
 import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveUid } from './pinBar';
 import { showToast } from './toast';
 import { getDesiredHostMid, getUpInfoByFace, getUpInfoByName, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
@@ -433,4 +433,9 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
 
 export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
   await refreshPinUi(stripRoot);
+
+  if (!stripRoot.hasAttribute('data-bili-pin-global-listener')) {
+    stripRoot.setAttribute('data-bili-pin-global-listener', '1');
+    onPinsChange(() => refreshPinUi(stripRoot));
+  }
 }
