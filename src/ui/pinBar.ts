@@ -153,7 +153,7 @@ function updatePinBarCollapse(bar: HTMLElement): void {
 
   // 文案
   if (needsToggle) {
-    toggle.textContent = expanded ? '收起' : '展开';
+    toggle.textContent = expanded ? '收起' : `展开(还有${hiddenCount}个)`;
   } else {
     // 不需要展开：强制为收起状态，避免占位
     bar.dataset.expanded = '0';

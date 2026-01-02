@@ -121,12 +121,6 @@ function syncPinBarSizingFromBili(stripRoot: HTMLElement, bar: HTMLElement): voi
     const lineHeight = Number.isFinite(lineHeightRaw) && lineHeightRaw > 0 ? lineHeightRaw : (fontSize ? fontSize * 1.3 : 16);
     if (fontSize > 0) listEl.style.setProperty('--bili-pin-name-font-size', `${fontSize}px`);
     if (lineHeight > 0) listEl.style.setProperty('--bili-pin-name-line-height', `${lineHeight}px`);
-    // 置顶栏支持两行
-    listEl.style.setProperty('--bili-pin-name-lines', '2');
-    listEl.style.setProperty('--bili-pin-name-max-height', `${lineHeight * 2}px`);
-
-    const collapsed = (faceSize || 44) + 6 + (lineHeight * 2) + 12;
-    listEl.style.setProperty('--bili-pin-collapsed-max-height', `${collapsed}px`);
   }
 }
 

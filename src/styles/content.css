@@ -14,14 +14,11 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   background: var(--bg1_float, #ffffff);
   border: 1px solid var(--line_regular, #e3e5e7);
   border-radius: 10px;
-  /* 这些是“兜底默认值”：真正的尺寸会在运行时从 B 站推荐栏同步并覆盖 */
   --bili-pin-item-width: 72px;
   --bili-pin-face-size: 44px;
   --bili-pin-name-font-size: 12px;
   --bili-pin-name-line-height: 16px;
-  --bili-pin-name-lines: 2;
-  --bili-pin-name-max-height: 32px;
-  --bili-pin-collapsed-max-height: 88px;
+  --bili-pin-collapsed-max-height: 85px;
 }
 
 .bili-pin-bar__header {
@@ -78,7 +75,6 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 }
 
 .bili-pin-bar__list.is-collapsed {
-  /* 约等于：头像44px + 间距6px + 文本一行约16px */
   max-height: var(--bili-pin-collapsed-max-height);
 }
 
