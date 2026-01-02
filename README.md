@@ -12,6 +12,9 @@
 - **Roadmap（版本规划）**：[`plans/roadmap.md`](plans/roadmap.md)
 - **任务交接文档**：[`plans/handoff.md`](plans/handoff.md)
 - **每次完成一个“可验收”的改动后，务必回来更新 [`plans/handoff.md`](plans/handoff.md)文档**：写清改动点、涉及文件、如何验证，并删除过时描述，避免文档落后于实现。
+- **版本号规范**：
+  - 功能变更增加第二位数字（v1.1.0）
+  - 只修 Bug 无功能变更只增加第三位数字（v1.0.1）
 
 ## 如何在 Chrome 中加载本插件（生产构建）
 

@@ -1,6 +1,6 @@
 # Bili Pin Roadmap
 
-## v0.0.1（进行中）
+## v1.0.0
 
 ### ✅ 已完成
 - 动态页 `https://t.bilibili.com/` 注入“置顶动态”栏

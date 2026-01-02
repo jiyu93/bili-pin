@@ -4,7 +4,7 @@ export default defineConfig({
   manifestVersion: 3,
   manifest: {
     name: 'Bili Pin',
-    version: '0.0.1',
+    version: '1.0.0',
     description: '在B站动态页添加置顶动态头像栏',
     permissions: ['storage'],
     host_permissions: [
