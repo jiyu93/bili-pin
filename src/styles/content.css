@@ -223,6 +223,16 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   font-weight: 500;
 }
 
+/* Hover 状态：鼠标悬停时的蓝色圆框和蓝色文字 */
+/* 注意：仅在 .bili-pin-bar__itemMain (点击区域) 上 hover 时触发，避免 hover 到右上角删除按钮时也触发 */
+.bili-pin-bar__itemMain:hover .bili-pin-bar__face {
+  box-shadow: 0 0 0 2px var(--brand_blue, #00a1d6), 0 0 0 3px rgba(0, 161, 214, 0.2);
+}
+
+.bili-pin-bar__itemMain:hover .bili-pin-bar__name {
+  color: var(--brand_blue, #00a1d6);
+}
+
 /* 关注UP推荐列表上的“置顶/已置顶”按钮 */
 .bili-pin-btn {
   position: absolute;
