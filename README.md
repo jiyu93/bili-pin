@@ -47,11 +47,11 @@ npm run build
 
 - **PRD（主需求文档）**：[`plans/prd.md`](plans/prd.md)
 - **Roadmap（版本规划）**：[`plans/roadmap.md`](plans/roadmap.md)
-- **任务交接文档**：`plans/HANDOFF.md` - 新会话请先阅读此文档了解当前状态和待办事项
+- **任务交接文档**：`plans/handoff.md` - 新会话请先阅读此文档了解当前状态和待办事项
 
 ## 协作约定（对人类 & AI）
 
-- **每次完成一个“可验收”的改动后，必须同步更新 `plans/HANDOFF.md`**：写清改动点、涉及文件、如何验证，并删除过时描述，避免文档落后于实现。
+- **每次完成一个“可验收”的改动后，必须同步更新 `plans/handoff.md`**：写清改动点、涉及文件、如何验证，并删除过时描述，避免文档落后于实现。
 
 ## 说明
 
