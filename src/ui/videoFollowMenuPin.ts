@@ -9,7 +9,8 @@ const FOLLOW_ITEM_SELECTOR = 'ul.follow_dropdown > li';
 const MENU_ITEM_MARK = 'data-bili-pin-video-menu-item';
 
 function getOwnerFromInitialState(): { mid?: string; name?: string; face?: string } {
-  const st = (globalThis as any).__INITIAL_STATE__ ?? null;
+  // 注意：在 MAIN world 中可以直接访问 window.__INITIAL_STATE__
+  const st = (window as any).__INITIAL_STATE__ ?? null;
   const owner = st?.videoData?.owner ?? st?.videoData?.staff?.[0] ?? null;
   const mid = owner?.mid ?? owner?.uid ?? null;
   const name = owner?.name ?? owner?.uname ?? null;
