@@ -94,7 +94,7 @@
      - 拦截 `x/relation/followings` 接口，提取 `mid` 和 `mtime`（关注时间戳）并缓存。
      - 监听 `bili-pin:relation-list-updated` 事件（数据到达时）和 `popstate`（路由变化时）。
      - 遍历 DOM 中的关注卡片（`.relation-card`），通过 `a[href*="space..."]` 提取 mid。
-     - 匹配缓存中的 `mtime`，格式化后插入到卡片内容区（个性签名下方，操作按钮上方）。
+     - 匹配缓存中的 `mtime`，格式化后插入到卡片内容区底部（操作按钮下方）。
 
 ## 样式与交互（UI 要点）
 - `src/styles/content.css`
