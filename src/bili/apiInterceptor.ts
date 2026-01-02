@@ -11,6 +11,7 @@ export interface UpInfo {
   mid: string;
   name: string;
   face: string;
+  has_update?: boolean;
 }
 
 // 存储从API响应中提取的UP信息
@@ -71,8 +72,9 @@ function extractUpInfoFromPortalResponse(data: any): UpInfo[] {
         const mid = up?.mid ?? up?.uid;
         const face = up?.face ?? up?.avatar;
         const name = up?.name ?? up?.uname ?? up?.title ?? '';
+        const hasUpdate = !!(up?.has_update ?? 0);
         if (mid && face) {
-          ups.push({ mid: String(mid), face: String(face), name: String(name ?? '') });
+          ups.push({ mid: String(mid), face: String(face), name: String(name ?? ''), has_update: hasUpdate });
         }
       }
     }
@@ -305,6 +307,24 @@ export function getUpInfoByName(name: string): UpInfo | null {
   const n = name.trim();
   if (!n) return null;
   return lastPortalUpList.find((u) => u.name === n) || null;
+}
+
+/**
+ * 获取UP是否有新动态
+ */
+export function getUpUpdateStatus(mid: string): boolean {
+  const info = upInfoByMid.get(String(mid));
+  return info?.has_update ?? false;
+}
+
+/**
+ * 标记UP为已读（消除红点）
+ */
+export function markUpAsRead(mid: string): void {
+  const info = upInfoByMid.get(String(mid));
+  if (info) {
+    info.has_update = false;
+  }
 }
 
 /**

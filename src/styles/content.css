@@ -139,6 +139,19 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   height: var(--bili-pin-face-size);
 }
 
+.bili-pin-bar__updateDot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand_blue, #00a1d6);
+  border: 1.5px solid var(--bg1_float, #ffffff);
+  z-index: 1;
+  pointer-events: none;
+}
+
 .bili-pin-bar__unpin {
   position: absolute;
   top: -6px;

@@ -88,6 +88,10 @@
     - **Hover 高亮**：`.bili-pin-bar__itemMain:hover`，头像蓝圈（`box-shadow`）+ 蓝字（不加粗，避免抖动）
   - 图钉按钮两态：未置顶显示 outline，已置顶显示 filled（颜色通过 `color` 控制）
   - space 页菜单项：保持与原生菜单一致（不做 pinned 态高亮，避免样式串扰）
+  - **新动态红点/蓝点**：
+    - 数据源：B 站 portal 接口返回的 `has_update` 字段。
+    - 表现：置顶栏头像右下角显示小蓝点（`.bili-pin-bar__updateDot`），样式复刻原生推荐栏。
+    - 消除逻辑：点击置顶栏头像 或 点击原生推荐栏头像（触发 `setActiveUid`）时，更新缓存状态并立即移除 DOM 中的蓝点。
 
 ## 数据存储
 - `src/storage/pins.ts`

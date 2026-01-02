@@ -1,5 +1,6 @@
 import Sortable from 'sortablejs';
 import type { PinnedUp } from '../storage/pins';
+import { getUpUpdateStatus, markUpAsRead } from '../bili/apiInterceptor';
 
 export const PIN_BAR_ID = 'bili-pin-pinbar';
 export const PIN_BAR_LIST_ID = 'bili-pin-pinbar-list';
@@ -169,6 +170,20 @@ function updatePinBarCollapse(bar: HTMLElement): void {
 export function setActiveUid(uid: string | null): void {
   currentActiveMid = uid;
   updateActiveHighlight();
+
+  // 如果激活了某个UP，清除其更新状态（消蓝点）
+  if (uid) {
+    markUpAsRead(uid);
+    // 立即更新DOM，移除蓝点
+    const bar = document.getElementById(PIN_BAR_ID);
+    if (bar) {
+      const item = bar.querySelector<HTMLElement>(`.bili-pin-bar__item[data-mid="${uid}"]`);
+      if (item) {
+        const dot = item.querySelector('.bili-pin-bar__updateDot');
+        if (dot) dot.remove();
+      }
+    }
+  }
 }
 
 /**
@@ -262,6 +277,13 @@ export function renderPinBar(
     const name = document.createElement('div');
     name.className = 'bili-pin-bar__name';
     name.textContent = up.name ?? up.mid;
+
+    // 检查是否有新动态更新（蓝点）
+    if (getUpUpdateStatus(up.mid)) {
+      const dot = document.createElement('div');
+      dot.className = 'bili-pin-bar__updateDot';
+      faceWrap.appendChild(dot);
+    }
 
     faceWrap.appendChild(img);
     main.appendChild(name);
