@@ -1,6 +1,7 @@
 import contentStyles from '../src/styles/content.css?inline';
 import { injectStyleTag } from '../src/utils/style';
 import { observeSpacePage } from '../src/ui/spaceFollowMenuPin';
+import { observeFollowTime } from '../src/ui/followTime';
 import { initApiInterceptor } from '../src/bili/apiInterceptor';
 import { installDebugBridge } from '../src/bili/debugBridge';
 
@@ -18,9 +19,11 @@ export default defineContentScript({
     // 由于 runAt: document_start，此时 body 可能未就绪，需等待
     if (document.body) {
       observeSpacePage();
+      observeFollowTime();
     } else {
       document.addEventListener('DOMContentLoaded', () => {
         observeSpacePage();
+        observeFollowTime();
       });
     }
   },

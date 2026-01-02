@@ -12,6 +12,7 @@ export interface UpInfo {
   name: string;
   face: string;
   has_update?: boolean;
+  mtime?: number;
 }
 
 // 存储从API响应中提取的UP信息
@@ -98,8 +99,9 @@ function extractUpInfoFromRelationResponse(data: any): UpInfo[] {
         const mid = up?.mid ?? up?.uid;
         const face = up?.face ?? up?.avatar;
         const name = up?.uname ?? up?.name ?? '';
+        const mtime = up?.mtime;
         if (mid && face) {
-          ups.push({ mid: String(mid), face: String(face), name: String(name ?? '') });
+          ups.push({ mid: String(mid), face: String(face), name: String(name ?? ''), mtime });
         }
       }
     }
@@ -200,6 +202,14 @@ function processApiResponse(url: string, responseData: any): void {
     if (isPortal) {
       window.dispatchEvent(
         new CustomEvent('bili-pin:portal-up-list', {
+          detail: { count: ups.length },
+        }),
+      );
+    }
+
+    if (isRelation && ups.length > 0) {
+      window.dispatchEvent(
+        new CustomEvent('bili-pin:relation-list-updated', {
           detail: { count: ups.length },
         }),
       );
