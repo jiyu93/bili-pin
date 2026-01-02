@@ -408,14 +408,6 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
 
   renderButtons(stripRoot, pinnedSet);
 
-  // portal up_list ready 后，主动刷新一次（让按钮从“禁用”变为“可用”）
-  if (!stripRoot.hasAttribute('data-bili-pin-portal-listener')) {
-    stripRoot.setAttribute('data-bili-pin-portal-listener', '1');
-    window.addEventListener('bili-pin:portal-up-list', () => {
-      refreshPinUi(stripRoot).catch(() => {});
-    });
-  }
-
   // 监听推荐列表的选中状态（只设置一次）
   if (!stripRoot.hasAttribute('data-bili-pin-selection-observer')) {
     stripRoot.setAttribute('data-bili-pin-selection-observer', '1');
@@ -425,11 +417,64 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
   installGlobalExitFilterListenersOnce();
 }
 
+let activeObserver: MutationObserver | null = null;
+let activeStripRoot: HTMLElement | null = null;
+
+// 初始化全局单例监听（只运行一次）
+function initGlobalListenersOnce() {
+  if ((window as any)._biliPinGlobalInit) return;
+  (window as any)._biliPinGlobalInit = true;
+
+  // 1. 监听 portal/uplist 数据就绪事件
+  window.addEventListener('bili-pin:portal-up-list', () => {
+    if (activeStripRoot && document.contains(activeStripRoot)) {
+      refreshPinUi(activeStripRoot).catch(() => {});
+    }
+  });
+
+  // 2. 监听 storage 变更（pins 列表变化）
+  onPinsChange(() => {
+    if (activeStripRoot && document.contains(activeStripRoot)) {
+      refreshPinUi(activeStripRoot).catch(() => {});
+    }
+  });
+}
+
 export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
+  // 1. 初始化全局监听
+  initGlobalListenersOnce();
+
+  // 2. 清理旧的 Observer（如果有），避免内存泄漏
+  if (activeObserver) {
+    activeObserver.disconnect();
+    activeObserver = null;
+  }
+
+  // 3. 更新当前活跃的 Root
+  activeStripRoot = stripRoot;
+
+  // 4. 执行首次刷新
   await refreshPinUi(stripRoot);
 
-  if (!stripRoot.hasAttribute('data-bili-pin-global-listener')) {
-    stripRoot.setAttribute('data-bili-pin-global-listener', '1');
-    onPinsChange(() => refreshPinUi(stripRoot));
+  // 5. 设置新的 Observer
+  // 避免在这个 stripRoot 上重复设置（虽然逻辑上每次 inject 都是针对新 root，但防抖更安全）
+  if (!stripRoot.hasAttribute('data-bili-pin-mutation-observer')) {
+    stripRoot.setAttribute('data-bili-pin-mutation-observer', '1');
+    
+    activeObserver = new MutationObserver((mutations) => {
+      let shouldRefresh = false;
+      for (const m of mutations) {
+        if (m.type === 'childList') {
+          shouldRefresh = true;
+          break;
+        }
+      }
+      if (shouldRefresh) {
+        // 使用闭包捕获当前的 stripRoot 是安全的，因为 activeObserver 会在切换时被 disconnect
+        refreshPinUi(stripRoot).catch(() => {});
+      }
+    });
+    // B站动态加载是追加 .bili-dyn-up-list__item，通常在 stripRoot 的子孙节点中
+    activeObserver.observe(stripRoot, { childList: true, subtree: true });
   }
 }

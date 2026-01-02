@@ -20,14 +20,18 @@
 ## 1. 核心架构
 
 - **运行环境 (Worlds)**:
-  - `MAIN` World: 动态页 (`t.bilibili.com`) 和空间页 (`space.bilibili.com`)。必须在此环境运行以拦截/修改 XHR/Fetch 请求（`apiInterceptor`）和操作原生 DOM。
-  - `ISOLATED` World: 视频页 (`video.content.ts`) 和 Storage Bridge。用于相对独立的 UI 注入或与扩展 API 通信。
+  - `MAIN` World: 动态页 (`t.bilibili.com`)、空间页 (`space.bilibili.com`) 和视频页 (`video.content.ts`)。必须在此环境运行以拦截/修改 XHR/Fetch 请求（`apiInterceptor`）、访问 `window.__INITIAL_STATE__` 和操作原生 DOM。
+  - `ISOLATED` World: Storage Bridge (`entrypoints/storageBridge.content.ts`)。用于相对独立的 UI 注入或与扩展 API 通信（提供 `chrome.storage` 代理服务）。
 - **数据存储**: 使用 `chrome.storage.local`。这是为了跨子域（space vs dynamic）共享数据。
   - *注意*: `MAIN` world 无法直接访问 `chrome.storage`，通过 `entrypoints/storageBridge.content.ts` (Isolated) 转发 `window.postMessage` 实现读写。
 - **API 拦截 (`src/bili/apiInterceptor.ts`)**:
-  - 拦截 `portal` 和 `feed` 接口：缓存 UP 主头像/昵称（避免依赖不稳定的 DOM 解析）。
+  - 拦截 `portal`、`uplist` 和 `feed` 接口：缓存 UP 主头像/昵称（避免依赖不稳定的 DOM 解析）。
   - 拦截 `followings` 接口：获取关注时间。
   - **Feed 切换黑魔法**: 当点击置顶 UP 且该 UP 不在原生推荐栏时，拦截“全部动态”请求，强行替换 `host_mid` 参数，从而“欺骗”B 站前端渲染目标 UP 的 Feed。
+
+### 2.5 内存泄漏防护（重要）
+- **单例模式**: 所有全局监听器（`window.addEventListener`）和 `MutationObserver` 必须使用单例模式（检查 `root.getAttribute('data-bili-pin-*-installed')`）进行保护。
+- **原因**: B站是 SPA（单页应用），页面切换时 Content Script 可能重新执行注入逻辑，若不加以保护，会导致监听器重复注册，造成严重的内存泄漏和性能下降。
 
 ## 2. 功能模块实现
 

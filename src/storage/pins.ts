@@ -1,5 +1,7 @@
 // 注意：本项目的“UP 唯一标识”使用 B 站 mid（数字字符串）
 
+import { bridgeStorageGet, bridgeStorageSet } from '../utils/bridgeClient';
+
 export type PinnedUp = {
   mid: string;
   name?: string;
@@ -87,86 +89,6 @@ async function storageSet<T>(key: string, value: T): Promise<void> {
   } catch {
     // ignore
   }
-}
-
-type BridgeRequest =
-  | { __biliPin: 1; kind: 'storage:get'; requestId: string; key: string; fallback: unknown }
-  | { __biliPin: 1; kind: 'storage:set'; requestId: string; key: string; value: unknown };
-
-type BridgeResponse =
-  | { __biliPin: 1; kind: 'storage:response'; requestId: string; ok: true; value?: unknown }
-  | { __biliPin: 1; kind: 'storage:response'; requestId: string; ok: false; error: string };
-
-function randomId(): string {
-  // 足够用：只需在同一页面生命周期内避免冲突
-  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
-}
-
-function requestViaBridge<T>(req: BridgeRequest, timeoutMs = 500): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    let done = false;
-    const timer = window.setTimeout(() => {
-      if (done) return;
-      done = true;
-      window.removeEventListener('message', onMessage);
-      reject(new Error('storage bridge timeout'));
-    }, timeoutMs);
-
-    const onMessage = (event: MessageEvent) => {
-      if (event.source !== window) return;
-      const data = event.data as BridgeResponse;
-      if (!data || typeof data !== 'object') return;
-      if ((data as any).__biliPin !== 1) return;
-      if ((data as any).kind !== 'storage:response') return;
-      if ((data as any).requestId !== req.requestId) return;
-      if (done) return;
-      done = true;
-      window.clearTimeout(timer);
-      window.removeEventListener('message', onMessage);
-      if ((data as any).ok) {
-        resolve((data as any).value as T);
-      } else {
-        reject(new Error(String((data as any).error || 'storage bridge error')));
-      }
-    };
-
-    window.addEventListener('message', onMessage);
-    window.postMessage(req, '*');
-  });
-}
-
-async function bridgeStorageGet<T>(key: string, fallback: T): Promise<T> {
-  // 启动竞态：bridge 可能稍后才安装，因此做少量重试
-  const requestId = randomId();
-  const req: BridgeRequest = { __biliPin: 1, kind: 'storage:get', requestId, key, fallback };
-
-  let lastErr: unknown = null;
-  for (let i = 0; i < 3; i++) {
-    try {
-      return await requestViaBridge<T>(req, 600);
-    } catch (e) {
-      lastErr = e;
-      await new Promise((r) => setTimeout(r, 50 + i * 80));
-    }
-  }
-  throw lastErr ?? new Error('storage bridge get failed');
-}
-
-async function bridgeStorageSet<T>(key: string, value: T): Promise<void> {
-  const requestId = randomId();
-  const req: BridgeRequest = { __biliPin: 1, kind: 'storage:set', requestId, key, value };
-
-  let lastErr: unknown = null;
-  for (let i = 0; i < 3; i++) {
-    try {
-      await requestViaBridge<void>(req, 600);
-      return;
-    } catch (e) {
-      lastErr = e;
-      await new Promise((r) => setTimeout(r, 50 + i * 80));
-    }
-  }
-  throw lastErr ?? new Error('storage bridge set failed');
 }
 
 export async function getPinnedUps(): Promise<PinnedUp[]> {
@@ -301,5 +223,3 @@ export async function unpinUp(mid: string): Promise<PinnedUp[]> {
   await setPinnedUps(next);
   return next;
 }
-
-
