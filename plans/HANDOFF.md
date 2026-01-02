@@ -80,6 +80,8 @@
 
 ## 样式与交互（UI 要点）
 - `src/styles/content.css`
+  - **深色模式/Dark Reader 适配**：全面使用 B 站原生 CSS 变量（如 `--bg1_float`, `--text1`, `--line_regular`）替代硬编码的 `rgba` 颜色。
+  - **CSS 注入方式**：为了让 Dark Reader 能正确分析和处理（反转）插件样式，**不再使用 manifest 的 `content_scripts.css` 自动注入**，而是通过 JS (`import ...?inline` + `document.head.appendChild`) 动态注入 `<style>` 标签。这解决了“Chrome 扩展注入的 CSS 文件因跨域限制对 Dark Reader 不可见”的问题。
   - `html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs { display:none }`：置顶筛选态隐藏 tabs
   - 置顶栏高亮用 `box-shadow` 圆环（避免 border 导致尺寸抖动）
   - 图钉按钮两态：未置顶显示 outline，已置顶显示 filled（颜色通过 `color` 控制）

@@ -1,4 +1,5 @@
-import '../src/styles/content.css';
+import contentStyles from '../src/styles/content.css?inline';
+import { injectStyleTag } from '../src/utils/style';
 import { observeUpAvatarStrip } from '../src/bili/observe';
 import { injectPinUi } from '../src/ui/injectPinButtons';
 import { installDebugBridge } from '../src/bili/debugBridge';
@@ -11,6 +12,9 @@ export default defineContentScript({
   // 关键：在 MAIN world 运行，才能拦截页面自身发出的 fetch/xhr（隔离世界改 window.fetch 没用）
   world: 'MAIN',
   main() {
+    // 注入样式（inline模式，确保Dark Reader能识别）
+    injectStyleTag(contentStyles, 'bili-pin-content-style');
+
     // 尽早初始化API拦截器，在页面加载API请求之前
     initApiInterceptor();
     installDebugBridge();

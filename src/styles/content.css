@@ -11,8 +11,8 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   box-sizing: border-box;
   margin: 8px 0;
   padding: 10px 2px; /* 10px 12px -> 10px 2px, 总左padding为 2+4=6px */
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--bg1_float, #ffffff);
+  border: 1px solid var(--line_regular, #e3e5e7);
   border-radius: 10px;
   /* 这些是“兜底默认值”：真正的尺寸会在运行时从 B 站推荐栏同步并覆盖 */
   --bili-pin-item-width: 72px;
@@ -39,7 +39,7 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   gap: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.75);
+  color: var(--text1, #18191c);
   margin-bottom: 0;
 }
 
@@ -53,8 +53,8 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  background: rgba(0, 0, 0, 0.06);
-  color: rgba(0, 0, 0, 0.7);
+  background: var(--graph_bg_regular, #f1f2f3);
+  color: var(--text2, #61666d);
 }
 
 .bili-pin-bar__toggle {
@@ -62,9 +62,9 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   line-height: 1;
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: rgba(255, 255, 255, 0.9);
-  color: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--line_regular, #e3e5e7);
+  background: var(--bg1_float, #ffffff);
+  color: var(--text2, #61666d);
   cursor: pointer;
 }
 
@@ -88,7 +88,7 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 
 .bili-pin-bar__empty {
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.55);
+  color: var(--text3, #9499a0);
   padding: 6px 0;
 }
 
@@ -148,9 +148,9 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   height: 22px;
   padding: 0;
   border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  background: rgba(255, 255, 255, 0.95);
-  color: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--line_regular, rgba(0, 0, 0, 0.15));
+  background: var(--bg1_float, #ffffff);
+  color: var(--text2, #61666d);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -171,8 +171,9 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 
 .bili-pin-bar__unpin:hover,
 .bili-pin-bar__unpin:focus-visible {
-  border-color: rgba(0, 160, 255, 0.75);
+  border-color: var(--brand_blue, #00a1d6);
   box-shadow: 0 0 0 2px rgba(0, 161, 214, 0.15);
+  color: var(--brand_blue, #00a1d6);
 }
 
 .bili-pin-bar__item:hover .bili-pin-bar__unpin,
@@ -190,13 +191,13 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   height: var(--bili-pin-face-size);
   border-radius: 50%;
   object-fit: cover;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--graph_bg_regular, #f1f2f3);
 }
 
 .bili-pin-bar__name {
   font-size: var(--bili-pin-name-font-size);
   line-height: var(--bili-pin-name-line-height);
-  color: rgba(0, 0, 0, 0.7);
+  color: var(--text2, #61666d);
   width: var(--bili-pin-item-width);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -214,11 +215,11 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 /* 高亮状态：选中时的蓝色圆框和蓝色文字 */
 .bili-pin-bar__item.is-active .bili-pin-bar__face {
   /* 用 box-shadow 画圆环，避免 border 改变元素尺寸导致“选中时变大/抖动” */
-  box-shadow: 0 0 0 2px #00a1d6, 0 0 0 3px rgba(0, 161, 214, 0.2);
+  box-shadow: 0 0 0 2px var(--brand_blue, #00a1d6), 0 0 0 3px rgba(0, 161, 214, 0.2);
 }
 
 .bili-pin-bar__item.is-active .bili-pin-bar__name {
-  color: #00a1d6;
+  color: var(--brand_blue, #00a1d6);
   font-weight: 500;
 }
 
@@ -232,9 +233,9 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   height: 22px;
   padding: 0;
   border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  background: rgba(255, 255, 255, 0.9);
-  color: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--line_regular, rgba(0, 0, 0, 0.15));
+  background: var(--bg1_float, #ffffff);
+  color: var(--text2, #61666d);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -250,9 +251,9 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 
 .bili-pin-btn.is-pinned {
   /* 仅改变图标（stroke）颜色，不要蓝底 */
-  border-color: rgba(0, 160, 255, 0.95);
-  background: rgba(255, 255, 255, 0.9);
-  color: rgba(0, 160, 255, 0.95);
+  border-color: var(--brand_blue, #00a1d6);
+  background: var(--bg1_float, #ffffff);
+  color: var(--brand_blue, #00a1d6);
 }
 
 .bili-pin-btn:disabled {
