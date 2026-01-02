@@ -53,7 +53,7 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  background: var(--graph_bg_regular, #f1f2f3);
+  background: var(--bg3, rgba(0, 0, 0, 0.06));
   color: var(--text2, #61666d);
 }
 
@@ -74,7 +74,7 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   gap: var(--bili-pin-gap, 10px); /* 14px -> 动态或10px */
   justify-content: start;
   overflow: hidden;
-  padding: 4px; /* 防止 box-shadow 被切 */
+  padding: 10px;
 }
 
 .bili-pin-bar__list.is-collapsed {
