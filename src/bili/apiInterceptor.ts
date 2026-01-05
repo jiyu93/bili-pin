@@ -15,12 +15,42 @@ export interface UpInfo {
   mtime?: number;
 }
 
+const MAX_UP_INFO_CACHE = 5000;
+const MAX_PORTAL_UP_LIST = 2000;
+const MAX_MTIME_CACHE = 50000;
+
 // 存储从API响应中提取的UP信息
 // 只用于“从接口拿mid”，不作为持久化标识（持久化只存mid）
 const upInfoByFaceHash = new Map<string, UpInfo>(); // key: face hash (bfs/face/<hash>)
 const upInfoByMid = new Map<string, UpInfo>(); // key: mid
+const mtimeByMid = new Map<string, number>(); // key: mid -> mtime (关注时间)
 let lastPortalUpList: UpInfo[] = [];
 let desiredHostMid: string | null = null;
+
+function shouldProcessApiUrl(url: string): boolean {
+  const u = String(url || '');
+  if (!u.includes('api.bilibili.com')) return false;
+  // 仅处理我们真正用得到的接口，避免对所有 API 响应做 JSON 解析导致长期性能/内存压力
+  return (
+    u.includes('/x/polymer/web-dynamic/v1/portal') ||
+    u.includes('/x/polymer/web-dynamic/v1/uplist') ||
+    u.includes('/x/polymer/web-dynamic/v1/feed/') ||
+    u.includes('/x/relation/followings') ||
+    u.includes('/x/relation/fans') ||
+    u.includes('/x/relation/tag')
+  );
+}
+
+function trimOldestFromMap<K, V>(m: Map<K, V>, max: number): void {
+  if (m.size <= max) return;
+  let remove = m.size - max;
+  // Map 迭代顺序是插入顺序：删除最早的，避免无上限增长
+  for (const k of m.keys()) {
+    m.delete(k);
+    remove -= 1;
+    if (remove <= 0) break;
+  }
+}
 
 function syncFilteredMidAttr(): void {
   try {
@@ -208,10 +238,20 @@ function processApiResponse(url: string, responseData: any): void {
     }
 
     if (isPortal && ups.length) {
-      lastPortalUpList = ups;
+      // portal 是“当前推荐横条”的权威列表：直接替换
+      lastPortalUpList = ups.slice(0, MAX_PORTAL_UP_LIST);
     } else if (isUpList && ups.length) {
-      // 追加到 lastPortalUpList 以便 getUpInfoByName 能查到
-      lastPortalUpList = [...lastPortalUpList, ...ups];
+      // uplist 可能加载更多：做去重追加，并限制最大长度，避免长期增长
+      const existed = new Set(lastPortalUpList.map((u) => u.mid));
+      for (const up of ups) {
+        if (!up?.mid) continue;
+        if (existed.has(up.mid)) continue;
+        lastPortalUpList.push(up);
+        existed.add(up.mid);
+      }
+      if (lastPortalUpList.length > MAX_PORTAL_UP_LIST) {
+        lastPortalUpList = lastPortalUpList.slice(-MAX_PORTAL_UP_LIST);
+      }
     }
 
     // 缓存UP信息（用头像 hash 做关联，用于把“DOM里的头像”映射到 “portal给的mid”）
@@ -223,6 +263,21 @@ function processApiResponse(url: string, responseData: any): void {
         }
         upInfoByMid.set(String(up.mid), up);
       }
+    }
+    trimOldestFromMap(upInfoByFaceHash, MAX_UP_INFO_CACHE);
+    trimOldestFromMap(upInfoByMid, MAX_UP_INFO_CACHE);
+
+    // 关注时间单独缓存（关系列表可能很长，避免因 upInfo 裁剪导致关注时间功能失效）
+    if (isRelation && ups.length) {
+      for (const up of ups) {
+        const mid = up?.mid ? String(up.mid) : '';
+        const mtime = (up as any)?.mtime;
+        if (!mid || !/^\d+$/.test(mid)) continue;
+        if (typeof mtime === 'number' && Number.isFinite(mtime) && mtime > 0) {
+          mtimeByMid.set(mid, mtime);
+        }
+      }
+      trimOldestFromMap(mtimeByMid, MAX_MTIME_CACHE);
     }
 
     if (ups.length > 0) {
@@ -261,7 +316,16 @@ function interceptFetch(): void {
   const originalFetch = window.fetch;
   
   window.fetch = async function(...args) {
-    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+    const req = args[0] as (string | URL | Request | undefined);
+    const url =
+      typeof req === 'string'
+        ? req
+        : req instanceof Request
+          ? req.url
+          : req instanceof URL
+            ? req.toString()
+            : '';
+    const needProcess = shouldProcessApiUrl(url);
     
     // 只拦截B站API请求
     if (url.includes('api.bilibili.com')) {
@@ -279,15 +343,20 @@ function interceptFetch(): void {
 
         const response = await originalFetch.apply(this, args);
         
-        // 克隆响应以便读取（原始响应只能读取一次）
-        const clonedResponse = response.clone();
-        
-        // 异步处理响应，不阻塞原始请求
-        clonedResponse.json().then((data: any) => {
-          processApiResponse(url, data);
-        }).catch(() => {
-          // 如果不是JSON响应，忽略
-        });
+        // 仅对目标接口解析 JSON，避免对大量无关 API 响应做解析导致长期性能/内存压力
+        if (needProcess) {
+          // 克隆响应以便读取（原始响应只能读取一次）
+          const clonedResponse = response.clone();
+          // 异步处理响应，不阻塞原始请求
+          clonedResponse
+            .json()
+            .then((data: any) => {
+              processApiResponse(url, data);
+            })
+            .catch(() => {
+              // 如果不是JSON响应，忽略
+            });
+        }
         
         return response;
       } catch (error) {
@@ -307,19 +376,27 @@ function interceptXHR(): void {
   const originalOpen = XMLHttpRequest.prototype.open;
   const originalSend = XMLHttpRequest.prototype.send;
   
-  XMLHttpRequest.prototype.open = function(method: string, url: string | URL, ...args: any[]) {
+  XMLHttpRequest.prototype.open = function(
+    this: XMLHttpRequest,
+    method: string,
+    url: string | URL,
+    async?: boolean,
+    username?: string | null,
+    password?: string | null,
+  ) {
     const raw = typeof url === 'string' ? url : url.toString();
     const rewritten = raw.includes('api.bilibili.com') ? rewriteHostMidIfNeeded(raw) : raw;
-    this._biliPinUrl = rewritten;
-    return originalOpen.apply(this, [method, rewritten, ...args]);
+    (this as any)._biliPinUrl = rewritten;
+    return originalOpen.call(this, method, rewritten, async ?? true, username as any, password as any);
   };
   
-  XMLHttpRequest.prototype.send = function(...args: any[]) {
-    const xhr = this;
+  XMLHttpRequest.prototype.send = function(this: XMLHttpRequest, body?: Document | XMLHttpRequestBodyInit | null) {
+    const xhr = this as any;
     const url = xhr._biliPinUrl || '';
+    const needProcess = shouldProcessApiUrl(url);
     
     // 只拦截B站API请求
-    if (url.includes('api.bilibili.com')) {
+    if (url.includes('api.bilibili.com') && needProcess) {
       const originalOnReadyStateChange = xhr.onreadystatechange;
       
       xhr.onreadystatechange = function() {
@@ -342,7 +419,7 @@ function interceptXHR(): void {
       };
     }
     
-    return originalSend.apply(this, args);
+    return originalSend.call(this, body as any);
   };
 }
 
@@ -350,6 +427,9 @@ function interceptXHR(): void {
  * 初始化API拦截
  */
 export function initApiInterceptor(): void {
+  const key = '__biliPinApiInterceptorInstalled';
+  if ((window as any)[key]) return;
+  (window as any)[key] = 1;
   interceptFetch();
   interceptXHR();
   debugLog('[bili-pin] API interceptor initialized');
@@ -369,6 +449,17 @@ export function getDesiredHostMid(): string | null {
  */
 export function getUpInfoByMid(mid: string): UpInfo | null {
   return upInfoByMid.get(String(mid)) || null;
+}
+
+export function getFollowMtimeByMid(mid: string): number | null {
+  const m = String(mid ?? '').trim();
+  if (!/^\d+$/.test(m)) return null;
+  const cached = mtimeByMid.get(m);
+  if (typeof cached === 'number' && Number.isFinite(cached) && cached > 0) return cached;
+  const info = upInfoByMid.get(m);
+  const fallback = info?.mtime;
+  if (typeof fallback === 'number' && Number.isFinite(fallback) && fallback > 0) return fallback;
+  return null;
 }
 
 /**

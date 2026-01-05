@@ -1,4 +1,4 @@
-import { getUpInfoByMid } from '../bili/apiInterceptor';
+import { getFollowMtimeByMid } from '../bili/apiInterceptor';
 
 const PROCESSED_ATTR = 'data-bili-pin-mtime-injected';
 
@@ -35,8 +35,8 @@ export function observeFollowTime(): void {
       const mid = m?.[1];
       if (!mid) return;
 
-      const info = getUpInfoByMid(mid);
-      if (info && info.mtime) {
+      const mtime = getFollowMtimeByMid(mid);
+      if (mtime) {
         // 2. 找插入位置
         // 优先适配 .relation-card-info 结构
         let container: Element | null = card.querySelector('.relation-card-info');
@@ -68,7 +68,7 @@ export function observeFollowTime(): void {
           timeDiv.style.marginBottom = '0px'; 
           timeDiv.style.lineHeight = '1.5';
           timeDiv.style.fontFamily = '"PingFang SC", HarmonyOS_Regular, "Helvetica Neue", "Microsoft YaHei", sans-serif';
-          timeDiv.textContent = `关注时间: ${formatTime(info.mtime)}`;
+          timeDiv.textContent = `关注时间: ${formatTime(mtime)}`;
           
           if (refNode) {
               container.insertBefore(timeDiv, refNode);
