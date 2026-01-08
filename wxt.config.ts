@@ -5,7 +5,7 @@ export default defineConfig({
   manifest: {
     name: 'Bili Pin',
     version: '1.0.3',
-    description: '一个轻量级的 Bilibili 浏览器扩展，置顶你的宝藏UP主',
+    description: '一个简单的Bilibili插件，在你的动态首页置顶你的宝藏UP主。',
     icons: {
       16: '/icons/icon-16.png',
       32: '/icons/icon-32.png',

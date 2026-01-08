@@ -1,7 +1,7 @@
 <div align="center">
   <img src="public/icons/icon.svg" width="120" height="120" alt="Bili Pin Logo" />
   <h1>Bili Pin</h1>
-  <p>一个轻量级的 Bilibili 浏览器扩展，置顶你的宝藏UP主，解决“关注了但错过动态乃至遗忘了曾经喜欢的UP主”的烦恼。</p>
+  <p>一个简单的Bilibili插件，在你的动态首页置顶你的宝藏UP主。</p>
 </div>
 
 ## ✨ 主要功能
@@ -21,7 +21,7 @@
   在个人空间“全部关注”列表中显示精确的关注时间，帮你回忆“入坑”时刻。
 
 - **🔒 隐私安全**
-  纯前端实现，所有数据仅存储在本地浏览器 (`chrome.storage.local`)，绝不上传任何服务器。
+  纯前端应用，所有数据仅存储在本地浏览器 (`chrome.storage.local`)，无云端同步/上传。
 
 ## 📦 安装指南
 
