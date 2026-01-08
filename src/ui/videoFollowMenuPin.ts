@@ -77,7 +77,10 @@ function isLikelyFollowMenu(content: HTMLElement): boolean {
 
 async function updateMenuItemText(item: HTMLElement, mid: string): Promise<void> {
   const pinned = await isPinned(mid);
-  item.textContent = pinned ? '取消置顶' : '置顶动态';
+  const text = pinned ? '取消置顶' : '置顶动态';
+  if (item.textContent !== text) {
+    item.textContent = text;
+  }
 }
 
 function ensureMenuItemInFollowDropdown(ul: HTMLElement): void {
@@ -161,7 +164,16 @@ function hookPopover(popover: HTMLElement): void {
   tryInject();
 
   // 监听“显示/隐藏”和内容生成：只观察这个 popover，自身开销很低
-  const mo = new MutationObserver(() => tryInject());
+  const mo = new MutationObserver((mutations) => {
+    // 防递归：忽略由插件自身 DOM 操作触发的变动
+    const isSelf = mutations.every((m) => {
+      const target = m.target instanceof Element ? m.target : m.target.parentElement;
+      return target?.closest(`[${MENU_ITEM_MARK}="1"]`);
+    });
+    if (isSelf) return;
+
+    tryInject();
+  });
   mo.observe(popover, { attributes: true, childList: true, subtree: true });
 }
 

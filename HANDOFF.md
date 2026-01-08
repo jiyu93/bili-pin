@@ -31,7 +31,11 @@
 
 ### 2.5 内存泄漏防护（重要）
 - **单例模式**: 所有全局监听器（`window.addEventListener`）和 `MutationObserver` 必须使用单例模式（检查 `root.getAttribute('data-bili-pin-*-installed')`）进行保护。
-- **原因**: B站是 SPA（单页应用），页面切换时 Content Script 可能重新执行注入逻辑，若不加以保护，会导致监听器重复注册，造成严重的内存泄漏和性能下降。
+- **防止 Mutation Loop**:
+  - 在 `MutationObserver` 回调中修改 DOM 时，必须小心避免触发无限递归（OOM 崩溃的主因）。
+  - **措施 1**: 修改 DOM 前先检查值是否真正改变（如 `textContent`）。
+  - **措施 2**: 在 Observer 回调中过滤掉由插件自身元素（如带 `data-bili-pin-*` 属性）引起的变动。
+- **原因**: B站是 SPA（单页应用），页面切换时 Content Script 可能重新执行注入逻辑，若不加以保护，会导致监听器重复注册。且视频页等高频更新页面若存在 Observer 递归，会导致长时间播放后内存溢出。
 
 ## 2. 功能模块实现
 
