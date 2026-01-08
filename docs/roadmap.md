@@ -1,5 +1,11 @@
 # Bili Pin Roadmap
 
+## v1.0.4
+- **权限与代码优化**：
+  - 移除 `host_permissions` 权限申请（Manifest V3 内容脚本无需此权限）。
+  - 收窄 API 拦截脚本的注入范围（仅限视频页），减少对无关页面的影响。
+  - 清理废弃的 API 调用代码。
+
 ## v1.0.3
 - **Bug Fixes**:
   - 修复视频播放页长时间挂机后因 `MutationObserver` 死循环导致的内存溢出 (OOM) 崩溃。

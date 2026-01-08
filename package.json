@@ -1,6 +1,6 @@
 {
   "name": "bili-pin",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Bilibili 动态页置顶动态 + 个人空间页已关注菜单置顶动态（浏览器扩展）",
   "private": true,
   "scripts": {
