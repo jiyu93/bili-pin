@@ -1,5 +1,9 @@
 # Bili Pin Roadmap
 
+## v1.0.3
+- **Bug Fixes**:
+  - 修复视频播放页长时间挂机后因 `MutationObserver` 死循环导致的内存溢出 (OOM) 崩溃。
+
 ## v1.0.2 
 - **稳定性 / 性能（长时间挂着不崩）**：
   - 收窄 API 拦截范围：仅对 `portal/uplist/feed/relation` 等我们真正依赖的接口解析 JSON，避免对所有 `api.bilibili.com` 响应做解析导致长期性能/内存压力累积。
