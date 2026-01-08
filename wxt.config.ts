@@ -22,12 +22,6 @@ export default defineConfig({
       },
     },
     permissions: ['storage'],
-    host_permissions: [
-      'https://t.bilibili.com/*',
-      'https://space.bilibili.com/*',
-      'https://www.bilibili.com/*',
-      'https://api.bilibili.com/*',
-    ],
   },
 });
 
