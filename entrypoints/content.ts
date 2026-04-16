@@ -5,6 +5,7 @@ import { injectPinUi } from '../src/ui/injectPinButtons';
 import { installDebugBridge } from '../src/bili/debugBridge';
 import { initApiInterceptor } from '../src/bili/apiInterceptor';
 import { observeDynamicFeedMoreMenu } from '../src/ui/dynamicMoreMenuPin';
+import { observeDynamicUserCard } from '../src/ui/dynamicUserCardPin';
 
 export default defineContentScript({
   matches: ['https://t.bilibili.com/*'],
@@ -20,6 +21,8 @@ export default defineContentScript({
     installDebugBridge();
     // 动态流卡片右上角“三点菜单”里注入“置顶动态/取消置顶”
     observeDynamicFeedMoreMenu();
+    // 动态流头像 hover 弹出的 UP 主信息卡片中注入"置顶动态/取消置顶"
+    observeDynamicUserCard();
 
     observeUpAvatarStrip((stripRoot) => {
       injectPinUi(stripRoot).catch((err) => {

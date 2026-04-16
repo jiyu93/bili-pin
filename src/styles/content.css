@@ -314,6 +314,11 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   background: transparent;
 }
 
+/* 动态流 hover 头像弹出的 UP 主信息卡片：置顶按钮兜底 */
+[data-bili-pin-user-card-btn] {
+  white-space: nowrap;
+}
+
 /* hover/聚焦时显示按钮 */
 .bili-dyn-up-list__item:hover .bili-pin-btn,
 .bili-dyn-up-list__item:focus-within .bili-pin-btn {
