@@ -13,6 +13,31 @@ function randomId(): string {
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 }
 
+// 全局监听 bridge 主动广播的 storage:changed（用于跨标签页/跨设备同步通知）
+type StorageChangeHandler = (key: string, newValue: unknown) => void;
+const storageChangeListeners = new Set<StorageChangeHandler>();
+
+window.addEventListener('message', (event: MessageEvent) => {
+  if (event.source !== window) return;
+  const data = event.data;
+  if (!data || typeof data !== 'object') return;
+  if ((data as any).__biliPin !== 1) return;
+  if ((data as any).kind !== 'storage:changed') return;
+
+  for (const cb of storageChangeListeners) {
+    try {
+      cb((data as any).key, (data as any).newValue);
+    } catch (e) {
+      console.error('[bili-pin] error in storage change listener', e);
+    }
+  }
+});
+
+export function onBridgeStorageChange(listener: StorageChangeHandler): () => void {
+  storageChangeListeners.add(listener);
+  return () => storageChangeListeners.delete(listener);
+}
+
 function requestViaBridge<T>(req: BridgeRequest, timeoutMs = 500): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let done = false;
@@ -79,4 +104,5 @@ export async function bridgeStorageSet<T>(key: string, value: T): Promise<void> 
   }
   throw lastErr ?? new Error('storage bridge set failed');
 }
+
 

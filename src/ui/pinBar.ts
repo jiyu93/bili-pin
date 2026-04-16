@@ -1,5 +1,6 @@
 import Sortable from 'sortablejs';
 import type { PinnedUp } from '../storage/pins';
+import { syncStorageGet, syncStorageSet } from '../storage/syncStorage';
 import { getUpUpdateStatus, markUpAsRead } from '../bili/apiInterceptor';
 
 export const PIN_BAR_ID = 'bili-pin-pinbar';
@@ -19,37 +20,12 @@ export type PinBarHandlers = {
 let currentActiveMid: string | null = null;
 
 async function storageGetBool(key: string, fallback: boolean): Promise<boolean> {
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (chromeStorage?.get) {
-    return await new Promise<boolean>((resolve) => {
-      chromeStorage.get({ [key]: fallback }, (result: Record<string, unknown>) => {
-        resolve(Boolean(result?.[key] ?? fallback));
-      });
-    });
-  }
-
-  try {
-    const raw = globalThis.localStorage?.getItem(key);
-    return raw ? Boolean(JSON.parse(raw)) : fallback;
-  } catch {
-    return fallback;
-  }
+  const value = await syncStorageGet<boolean>(key, fallback);
+  return Boolean(value);
 }
 
 async function storageSetBool(key: string, value: boolean): Promise<void> {
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (chromeStorage?.set) {
-    await new Promise<void>((resolve) => {
-      chromeStorage.set({ [key]: value }, () => resolve());
-    });
-    return;
-  }
-
-  try {
-    globalThis.localStorage?.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
+  await syncStorageSet<boolean>(key, value);
 }
 
 export async function ensurePinBarPrefs(bar: HTMLElement): Promise<void> {

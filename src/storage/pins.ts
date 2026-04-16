@@ -1,6 +1,6 @@
 // 注意：本项目的“UP 唯一标识”使用 B 站 mid（数字字符串）
 
-import { bridgeStorageGet, bridgeStorageSet } from '../utils/bridgeClient';
+import { syncStorageGet, syncStorageSet } from './syncStorage';
 
 export type PinnedUp = {
   mid: string;
@@ -40,55 +40,11 @@ function uniqByUid(list: PinnedUp[]): PinnedUp[] {
 }
 
 async function storageGet<T>(key: string, fallback: T): Promise<T> {
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (chromeStorage?.get) {
-    return await new Promise<T>((resolve) => {
-      chromeStorage.get({ [key]: fallback }, (result: Record<string, unknown>) => {
-        resolve((result?.[key] as T) ?? fallback);
-      });
-    });
-  }
-
-  // 次优：通过 storage bridge（ISOLATED world）访问 chrome.storage.local
-  // 说明：MAIN world 无法直接访问扩展 API，但可以通过 window.postMessage 与 ISOLATED content script 通信。
-  try {
-    const value = await bridgeStorageGet<T>(key, fallback);
-    return value;
-  } catch {
-    // ignore，继续走 localStorage 兜底
-  }
-
-  // 兜底：开发/测试环境（不在扩展上下文时）用 localStorage（注意：不同子域不共享）
-  try {
-    const raw = globalThis.localStorage?.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
+  return syncStorageGet<T>(key, fallback);
 }
 
 async function storageSet<T>(key: string, value: T): Promise<void> {
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (chromeStorage?.set) {
-    await new Promise<void>((resolve) => {
-      chromeStorage.set({ [key]: value }, () => resolve());
-    });
-    return;
-  }
-
-  // 次优：通过 storage bridge（ISOLATED world）访问 chrome.storage.local
-  try {
-    await bridgeStorageSet<T>(key, value);
-    return;
-  } catch {
-    // ignore，继续走 localStorage 兜底
-  }
-
-  try {
-    globalThis.localStorage?.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
+  return syncStorageSet<T>(key, value);
 }
 
 export async function getPinnedUps(): Promise<PinnedUp[]> {
@@ -133,7 +89,7 @@ export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
   const normalized = raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[];
   const next = uniqByUid(normalized);
   await storageSet(STORAGE_KEY, next);
-  
+
   // 通知监听器
   notifyListeners(next);
 }
@@ -210,7 +166,7 @@ export async function updateUpMid(oldMid: string, newMid: string): Promise<Pinne
 
 export async function unpinUp(mid: string): Promise<PinnedUp[]> {
   const target = String(mid ?? '').trim();
-  
+
   // 只处理真实的数字mid
   if (!/^\d+$/.test(target)) {
     console.warn('[bili-pin] cannot unpin: invalid mid', { mid: target });
@@ -223,3 +179,29 @@ export async function unpinUp(mid: string): Promise<PinnedUp[]> {
   await setPinnedUps(next);
   return next;
 }
+
+// 监听外部同步变更（跨标签页 / 跨设备）
+function initStorageChangeListener() {
+  const sync = (globalThis as any).chrome?.storage?.sync;
+  if (sync?.onChanged?.addListener) {
+    sync.onChanged.addListener((changes: Record<string, any>) => {
+      if (changes[STORAGE_KEY]) {
+        getPinnedUps().then(notifyListeners).catch(() => {});
+      }
+    });
+    return;
+  }
+
+  // MAIN world 中通过 bridge 监听
+  import('../utils/bridgeClient')
+    .then(({ onBridgeStorageChange }) => {
+      onBridgeStorageChange((key) => {
+        if (key === STORAGE_KEY) {
+          getPinnedUps().then(notifyListeners).catch(() => {});
+        }
+      });
+    })
+    .catch(() => {});
+}
+
+initStorageChangeListener();

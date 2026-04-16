@@ -1,7 +1,8 @@
 /**
  * storage bridge（ISOLATED world）
  *
- * 目的：让 MAIN world 代码也能稳定读写 `chrome.storage.local`（跨子域共享），避免退回页面 localStorage。
+ * 目的：让 MAIN world 代码也能稳定读写 chrome.storage（跨子域共享），避免退回页面 localStorage。
+ * 策略：优先读写 chrome.storage.sync（支持同一 Google 账号跨设备同步），local 作为离线缓存兜底。
  */
 
 type BridgeRequest =
@@ -57,24 +58,53 @@ async function chromeStorageGet<T>(key: string, fallback: T): Promise<T> {
   if (!isAllowedKey(key)) {
     throw new Error(`Access denied: key "${key}" is not allowed`);
   }
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (!chromeStorage?.get) throw new Error('chrome.storage.local not available');
-  return await new Promise<T>((resolve) => {
-    chromeStorage.get({ [key]: fallback }, (result: Record<string, unknown>) => {
-      resolve((result?.[key] as T) ?? fallback);
+  const local = (globalThis as any).chrome?.storage?.local;
+  const sync = (globalThis as any).chrome?.storage?.sync;
+
+  // 优先读 sync
+  if (sync?.get) {
+    try {
+      const result = await new Promise<Record<string, unknown>>((resolve) => {
+        sync.get({ [key]: undefined }, resolve);
+      });
+      const value = result?.[key] as T;
+      if (value !== undefined) return value;
+    } catch {}
+  }
+
+  // sync 无数据，读 local
+  if (local?.get) {
+    const result = await new Promise<Record<string, unknown>>((resolve) => {
+      local.get({ [key]: fallback }, resolve);
     });
-  });
+    const value = (result?.[key] as T) ?? fallback;
+    // 迁移：local 有数据但 sync 为空，自动提升到 sync
+    if (value !== fallback && sync?.set) {
+      sync.set({ [key]: value }).catch(() => {});
+    }
+    return value;
+  }
+
+  throw new Error('chrome.storage not available');
 }
 
 async function chromeStorageSet<T>(key: string, value: T): Promise<void> {
   if (!isAllowedKey(key)) {
     throw new Error(`Access denied: key "${key}" is not allowed`);
   }
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (!chromeStorage?.set) throw new Error('chrome.storage.local not available');
-  await new Promise<void>((resolve) => {
-    chromeStorage.set({ [key]: value }, () => resolve());
-  });
+  const local = (globalThis as any).chrome?.storage?.local;
+  const sync = (globalThis as any).chrome?.storage?.sync;
+
+  // 同时写入 sync 和 local
+  if (sync?.set) {
+    await new Promise<void>((resolve) => sync.set({ [key]: value }, () => resolve()));
+  }
+  if (local?.set) {
+    await new Promise<void>((resolve) => local.set({ [key]: value }, () => resolve()));
+    return;
+  }
+
+  throw new Error('chrome.storage not available');
 }
 
 export default defineContentScript({
@@ -84,6 +114,25 @@ export default defineContentScript({
   main() {
     if ((globalThis as any).__biliPinStorageBridgeInstalled) return;
     (globalThis as any).__biliPinStorageBridgeInstalled = 1;
+
+    // 监听 chrome.storage.sync 变更，主动向 MAIN world 广播
+    const sync = (globalThis as any).chrome?.storage?.sync;
+    if (sync?.onChanged?.addListener) {
+      sync.onChanged.addListener((changes: Record<string, any>) => {
+        for (const [key, change] of Object.entries(changes)) {
+          if (!isAllowedKey(key)) continue;
+          window.postMessage(
+            {
+              __biliPin: 1,
+              kind: 'storage:changed',
+              key,
+              newValue: change?.newValue,
+            },
+            '*',
+          );
+        }
+      });
+    }
 
     window.addEventListener('message', (event: MessageEvent) => {
       if (event.source !== window) return;

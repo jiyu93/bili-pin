@@ -17,5 +17,5 @@
 
 ## 技术目标
 - 纯前端实现，无后端服务。
-- 数据存储在用户浏览器本地 (`chrome.storage.local`)，隐私安全。
+- 数据存储在用户浏览器本地，优先使用 `chrome.storage.sync` 实现同一 Google 账号下的配置同步，未登录时自动降级到 `chrome.storage.local`。
 - 适配 B 站原生样式
