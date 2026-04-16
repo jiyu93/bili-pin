@@ -1,7 +1,7 @@
 <div align="center">
   <img src="public/icons/icon.svg" width="120" height="120" alt="Bili Pin Logo" />
   <h1>Bili Pin</h1>
-  <p>一个简单的Bilibili插件，在你的动态首页置顶你的宝藏UP主。</p>
+  <p>一个简单的 Bilibili 插件，在你的动态首页置顶你的宝藏 UP 主。</p>
 </div>
 
 ## ✨ 主要功能
@@ -25,7 +25,7 @@
 
 ## 📦 安装指南
 
-### 方法一：加载已解压的扩展程序 (开发者/源码安装)
+### 加载已解压的扩展程序 (源码安装)
 
 1. **获取代码**
    ```bash
@@ -49,8 +49,6 @@
 
 本项目使用 [WXT](https://wxt.dev/) 框架开发，支持 TypeScript。
 
-### 常用命令
-
 ```bash
 # 启动开发服务器 (支持热重载)
 npm run dev
@@ -62,8 +60,8 @@ npm run build
 npm run zip
 ```
 
-### 项目文档
+## 📚 项目文档
 
-- [PRD (产品需求)](docs/prd.md): 了解设计初衷与详细功能定义。
-- [Handoff (技术架构)](HANDOFF.md): 了解核心实现原理、运行环境隔离与拦截策略（**贡献代码前必读**）。
-- [Roadmap (版本规划)](docs/roadmap.md): 查看未来计划。
+- **`AGENTS.md`** — **AI / 贡献者必读**：核心架构、开发规范、内存泄漏防护、功能模块速查、验收清单。
+- [`docs/prd.md`](docs/prd.md) — 产品设计初衷与详细功能定义（历史需求档案）。
+- [`docs/roadmap.md`](docs/roadmap.md) — 版本规划与未来计划。
