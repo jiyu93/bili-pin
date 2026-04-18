@@ -82,7 +82,6 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 | **动态页置顶栏 & Feed 切换** | `entrypoints/content.ts` | `src/ui/pinBar.ts` (渲染), `src/bili/feedSwitch.ts` (切换逻辑) | 使用 `sortablejs` 实现拖拽排序。 |
 | **动态页推荐栏图钉按钮** | - | `src/ui/injectPinButtons.ts` | 在头像容器右上角插入图钉按钮。 |
 | **动态卡片菜单置顶选项** | - | `src/ui/dynamicMoreMenuPin.ts` | **克隆**原生"三点菜单"项插入。 |
-| **动态页头像 hover 卡片置顶** | - | `src/ui/dynamicUserCardPin.ts` | 在 feed 流头像 hover 弹出的 UP 主信息卡片（"已关注"/"发消息"区域）中注入置顶/取消置顶按钮。 |
 | **空间页/视频页菜单置顶** | `entrypoints/space.content.ts`, `video.content.ts` | 各自入口文件内实现 | 监听"已关注"按钮 hover 弹层 (`.vui_popover` / `.van-popover`)，**克隆**原生菜单项插入。难点：通过 `mouseover` 追踪和 API 缓存识别当前 hover 的是哪个 UP。 |
 | **关注时间显示** | - | `src/ui/followTime.ts` | 依赖 `apiInterceptor` 缓存的 `mid -> mtime` 映射，在 DOM 中插入格式化时间文本。 |
 | **数据同步/状态管理** | - | `src/storage/pins.ts` + `src/storage/syncStorage.ts` | 所有 UI 通过 `onPinsChange` 事件响应式同步；跨设备通过 `chrome.storage.sync` 自动同步。 |
@@ -105,10 +104,9 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 
 ## 6. 当前状态与近期变更
 
-**当前版本：`v1.1.1`**
+**当前版本：`v1.1.0`**
 
 ### 已完成（最近在上面的变更）
-- `v1.1.1`：在动态页 `t.bilibili.com` 的 feed 流头像 hover 弹出的 UP 主信息卡片中，新增"置顶动态/取消置顶"按钮（位于"发消息"右侧）。通过内容特征识别卡片 DOM，克隆原生按钮样式，支持响应式状态同步。
 - `v1.1.0`：新增配置同步功能。存储层迁移到 `chrome.storage.sync`，在同一 Google 账号内自动同步置顶列表与 UI 展开状态；保留 `local` 作为离线降级；通过 `storageBridge` 实时监听同步变更并自动刷新 UI。
 - `v1.0.4`：移除不必要的 `host_permissions`；收窄 API 拦截脚本注入范围（仅限视频页）；清理废弃 API 调用代码。
 - `v1.0.3`：修复视频播放页长时间挂机后因 `MutationObserver` 死循环导致的 OOM 崩溃。
@@ -145,6 +143,5 @@ src/
     pinBar.ts             # 置顶栏渲染
     injectPinButtons.ts   # 推荐栏图钉按钮
     dynamicMoreMenuPin.ts # 动态卡片菜单注入
-    dynamicUserCardPin.ts # 动态页头像 hover 卡片置顶按钮
     followTime.ts         # 关注时间显示
 ```
