@@ -2,12 +2,6 @@
 
 # Bili Pin Roadmap
 
-## v1.1.0
-- **配置同步**：
-  - 存储层迁移到 `chrome.storage.sync`，在同一 Google 账号下自动同步置顶列表与 UI 状态。
-  - 保留 `chrome.storage.local` 作为离线缓存与降级方案。
-  - 通过 `storageBridge` 监听 `chrome.storage.sync.onChanged`，实现跨标签页/跨设备的实时同步更新。
-
 ## v1.0.4
 - **权限与代码优化**：
   - 移除 `host_permissions` 权限申请（Manifest V3 内容脚本无需此权限）。
