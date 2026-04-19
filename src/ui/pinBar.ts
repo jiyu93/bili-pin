@@ -1,6 +1,7 @@
 import Sortable from 'sortablejs';
 import type { PinnedUp } from '../storage/pins';
 import { getUpUpdateStatus, markUpAsRead } from '../bili/apiInterceptor';
+import { readStorageValue, writeMirroredConfig, writeStorageValue } from '../storage/config';
 
 export const PIN_BAR_ID = 'bili-pin-pinbar';
 export const PIN_BAR_LIST_ID = 'bili-pin-pinbar-list';
@@ -8,6 +9,12 @@ export const PIN_BAR_TOGGLE_ID = 'bili-pin-pinbar-toggle';
 export const PIN_BAR_COUNT_ID = 'bili-pin-pinbar-count';
 
 const PIN_BAR_EXPANDED_KEY = 'biliPin.ui.pinBarExpanded.v1';
+const PIN_BAR_EXPANDED_STATE_KEY = 'biliPin.ui.pinBarExpanded.state.v2';
+
+type BoolState = {
+  value: boolean;
+  updatedAt: number;
+};
 
 export type PinBarHandlers = {
   onClickMid?: (mid: string) => void;
@@ -19,37 +26,61 @@ export type PinBarHandlers = {
 let currentActiveMid: string | null = null;
 
 async function storageGetBool(key: string, fallback: boolean): Promise<boolean> {
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (chromeStorage?.get) {
-    return await new Promise<boolean>((resolve) => {
-      chromeStorage.get({ [key]: fallback }, (result: Record<string, unknown>) => {
-        resolve(Boolean(result?.[key] ?? fallback));
-      });
-    });
+  const [syncStateEntry, localStateEntry, syncLegacyEntry, localLegacyEntry] = await Promise.all([
+    readStorageValue<BoolState>('sync', PIN_BAR_EXPANDED_STATE_KEY),
+    readStorageValue<BoolState>('local', PIN_BAR_EXPANDED_STATE_KEY),
+    readStorageValue<boolean>('sync', key),
+    readStorageValue<boolean>('local', key),
+  ]);
+
+  const syncState = syncStateEntry.found
+    ? {
+        value: Boolean(syncStateEntry.value?.value),
+        updatedAt: Number(syncStateEntry.value?.updatedAt ?? 0) || 0,
+      }
+    : syncLegacyEntry.found
+      ? { value: Boolean(syncLegacyEntry.value), updatedAt: 0 }
+      : null;
+  const localState = localStateEntry.found
+    ? {
+        value: Boolean(localStateEntry.value?.value),
+        updatedAt: Number(localStateEntry.value?.updatedAt ?? 0) || 0,
+      }
+    : localLegacyEntry.found
+      ? { value: Boolean(localLegacyEntry.value), updatedAt: 0 }
+      : null;
+
+  const authoritative = syncState ?? localState ?? { value: fallback, updatedAt: 0 };
+
+  const syncLegacyValue = syncLegacyEntry.found ? Boolean(syncLegacyEntry.value) : fallback;
+  const localLegacyValue = localLegacyEntry.found ? Boolean(localLegacyEntry.value) : fallback;
+  const syncStateDirty =
+    !syncStateEntry.found || !syncState || syncState.value !== authoritative.value || syncState.updatedAt !== authoritative.updatedAt;
+  const localStateDirty =
+    !localStateEntry.found || !localState || localState.value !== authoritative.value || localState.updatedAt !== authoritative.updatedAt;
+  const syncLegacyDirty = !syncLegacyEntry.found || syncLegacyValue !== authoritative.value;
+  const localLegacyDirty = !localLegacyEntry.found || localLegacyValue !== authoritative.value;
+
+  if (!syncState && localState && (syncStateDirty || syncLegacyDirty)) {
+    await writeStorageValue('sync', PIN_BAR_EXPANDED_STATE_KEY, authoritative);
+    await writeStorageValue('sync', key, authoritative.value);
   }
 
-  try {
-    const raw = globalThis.localStorage?.getItem(key);
-    return raw ? Boolean(JSON.parse(raw)) : fallback;
-  } catch {
-    return fallback;
+  if (syncState && (localStateDirty || localLegacyDirty)) {
+    await writeStorageValue('local', PIN_BAR_EXPANDED_STATE_KEY, authoritative);
+    await writeStorageValue('local', key, authoritative.value);
   }
+
+  return authoritative.value;
 }
 
 async function storageSetBool(key: string, value: boolean): Promise<void> {
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (chromeStorage?.set) {
-    await new Promise<void>((resolve) => {
-      chromeStorage.set({ [key]: value }, () => resolve());
-    });
-    return;
-  }
-
-  try {
-    globalThis.localStorage?.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
+  const state: BoolState = {
+    value,
+    updatedAt: Date.now(),
+  };
+  await writeMirroredConfig(PIN_BAR_EXPANDED_STATE_KEY, state);
+  await writeMirroredConfig(key, value);
 }
 
 export async function ensurePinBarPrefs(bar: HTMLElement): Promise<void> {
@@ -321,5 +352,3 @@ export function renderPinBar(
 
   requestAnimationFrame(() => updatePinBarCollapse(bar));
 }
-
-

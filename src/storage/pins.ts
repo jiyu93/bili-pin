@@ -1,6 +1,6 @@
 // 注意：本项目的“UP 唯一标识”使用 B 站 mid（数字字符串）
 
-import { bridgeStorageGet, bridgeStorageSet } from '../utils/bridgeClient';
+import { observeStorageChanges, readStorageValue, writeMirroredConfig, writeStorageValue } from './config';
 
 export type PinnedUp = {
   mid: string;
@@ -10,6 +10,24 @@ export type PinnedUp = {
 };
 
 const STORAGE_KEY = 'biliPin.pins.v1';
+const STORAGE_STATE_KEY = 'biliPin.pins.state.v2';
+
+type SyncedPinnedUp = PinnedUp & {
+  updatedAt: number;
+};
+
+type PinsState = {
+  version: 2;
+  items: SyncedPinnedUp[];
+  removed: Record<string, number>;
+  order: string[];
+  orderUpdatedAt: number;
+  updatedAt: number;
+};
+
+function serializeList(value: unknown): string {
+  return JSON.stringify(value ?? null);
+}
 
 function normalizeItem(item: any): PinnedUp | null {
   const face = String(item.face ?? '').trim() || undefined;
@@ -39,86 +57,221 @@ function uniqByUid(list: PinnedUp[]): PinnedUp[] {
   return Array.from(map.values());
 }
 
-async function storageGet<T>(key: string, fallback: T): Promise<T> {
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (chromeStorage?.get) {
-    return await new Promise<T>((resolve) => {
-      chromeStorage.get({ [key]: fallback }, (result: Record<string, unknown>) => {
-        resolve((result?.[key] as T) ?? fallback);
-      });
-    });
-  }
-
-  // 次优：通过 storage bridge（ISOLATED world）访问 chrome.storage.local
-  // 说明：MAIN world 无法直接访问扩展 API，但可以通过 window.postMessage 与 ISOLATED content script 通信。
-  try {
-    const value = await bridgeStorageGet<T>(key, fallback);
-    return value;
-  } catch {
-    // ignore，继续走 localStorage 兜底
-  }
-
-  // 兜底：开发/测试环境（不在扩展上下文时）用 localStorage（注意：不同子域不共享）
-  try {
-    const raw = globalThis.localStorage?.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
+function normalizeList(value: unknown): PinnedUp[] {
+  const raw = Array.isArray(value) ? value : [];
+  return uniqByUid(raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[]);
 }
 
-async function storageSet<T>(key: string, value: T): Promise<void> {
-  const chromeStorage = (globalThis as any).chrome?.storage?.local;
-  if (chromeStorage?.set) {
-    await new Promise<void>((resolve) => {
-      chromeStorage.set({ [key]: value }, () => resolve());
+function normalizeSyncedItem(item: unknown): SyncedPinnedUp | null {
+  const base = normalizeItem(item);
+  if (!base) return null;
+
+  const updatedAt = Number((item as any)?.updatedAt ?? base.pinnedAt ?? 0) || base.pinnedAt || Date.now();
+  return {
+    ...base,
+    updatedAt,
+  };
+}
+
+function normalizeRemoved(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  const next: Record<string, number> = {};
+  for (const [mid, ts] of Object.entries(value as Record<string, unknown>)) {
+    const targetMid = String(mid ?? '').trim();
+    const removedAt = Number(ts);
+    if (!/^\d+$/.test(targetMid)) continue;
+    if (!Number.isFinite(removedAt) || removedAt <= 0) continue;
+    next[targetMid] = removedAt;
+  }
+  return next;
+}
+
+function buildPinsStateFromList(list: PinnedUp[]): PinsState {
+  const normalized = uniqByUid(list);
+  const items: SyncedPinnedUp[] = normalized.map((item) => ({
+    ...item,
+    updatedAt: Number(item.pinnedAt) || Date.now(),
+  }));
+  const latest = Math.max(0, ...items.map((item) => item.updatedAt));
+  return {
+    version: 2,
+    items,
+    removed: {},
+    order: normalized.map((item) => item.mid),
+    orderUpdatedAt: latest,
+    updatedAt: latest,
+  };
+}
+
+function normalizePinsState(value: unknown): PinsState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return buildPinsStateFromList([]);
+  }
+
+  const raw = value as Record<string, unknown>;
+  const items = Array.isArray(raw.items)
+    ? raw.items.map((item) => normalizeSyncedItem(item)).filter(Boolean) as SyncedPinnedUp[]
+    : [];
+  const uniqItems = uniqByUid(items).map((item) => ({
+    ...item,
+    updatedAt: Number((item as any).updatedAt ?? item.pinnedAt ?? 0) || item.pinnedAt || Date.now(),
+  }));
+  const itemMidSet = new Set(uniqItems.map((item) => item.mid));
+  const order = Array.isArray(raw.order)
+    ? raw.order
+        .map((item) => String(item ?? '').trim())
+        .filter((mid, index, arr) => /^\d+$/.test(mid) && arr.indexOf(mid) === index && itemMidSet.has(mid))
+    : [];
+  const removed = normalizeRemoved(raw.removed);
+  const orderUpdatedAt = Number(raw.orderUpdatedAt ?? 0) || 0;
+  const updatedAt = Number(raw.updatedAt ?? 0) || Math.max(orderUpdatedAt, ...uniqItems.map((item) => item.updatedAt), 0);
+
+  return {
+    version: 2,
+    items: uniqItems,
+    removed,
+    order,
+    orderUpdatedAt,
+    updatedAt,
+  };
+}
+
+function getStateItemMap(state: PinsState): Map<string, SyncedPinnedUp> {
+  return new Map(state.items.map((item) => [item.mid, item] as const));
+}
+
+function derivePinnedUpsFromState(state: PinsState): PinnedUp[] {
+  const itemMap = getStateItemMap(state);
+  const ordered: PinnedUp[] = [];
+
+  for (const mid of state.order) {
+    const item = itemMap.get(mid);
+    if (!item) continue;
+    ordered.push({
+      mid: item.mid,
+      name: item.name,
+      face: item.face,
+      pinnedAt: item.pinnedAt,
     });
-    return;
+    itemMap.delete(mid);
   }
 
-  // 次优：通过 storage bridge（ISOLATED world）访问 chrome.storage.local
-  try {
-    await bridgeStorageSet<T>(key, value);
-    return;
-  } catch {
-    // ignore，继续走 localStorage 兜底
+  const remaining = Array.from(itemMap.values()).sort((a, b) => {
+    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+    return b.pinnedAt - a.pinnedAt;
+  });
+  for (const item of remaining) {
+    ordered.push({
+      mid: item.mid,
+      name: item.name,
+      face: item.face,
+      pinnedAt: item.pinnedAt,
+    });
   }
 
-  try {
-    globalThis.localStorage?.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
+  return ordered;
+}
+
+function serializePinsState(state: PinsState): string {
+  return JSON.stringify({
+    version: 2,
+    items: state.items
+      .slice()
+      .sort((a, b) => a.mid.localeCompare(b.mid))
+      .map((item) => ({
+        mid: item.mid,
+        name: item.name,
+        face: item.face,
+        pinnedAt: item.pinnedAt,
+        updatedAt: item.updatedAt,
+      })),
+    removed: Object.fromEntries(Object.entries(state.removed).sort(([a], [b]) => a.localeCompare(b))),
+    order: state.order,
+    orderUpdatedAt: state.orderUpdatedAt,
+    updatedAt: state.updatedAt,
+  });
+}
+
+async function writePinsSnapshot(state: PinsState): Promise<void> {
+  const list = derivePinnedUpsFromState(state);
+  await writeMirroredConfig(STORAGE_STATE_KEY, state);
+  await writeMirroredConfig(STORAGE_KEY, list);
+}
+
+async function writePinsSnapshotToArea(area: 'local' | 'sync', state: PinsState): Promise<void> {
+  const list = derivePinnedUpsFromState(state);
+  await writeStorageValue(area, STORAGE_STATE_KEY, state);
+  await writeStorageValue(area, STORAGE_KEY, list);
+}
+
+function hasPinsStateData(state: PinsState): boolean {
+  return state.items.length > 0 || Object.keys(state.removed).length > 0 || state.order.length > 0;
+}
+
+async function getAuthoritativePinsState(): Promise<PinsState> {
+  const [syncStateEntry, localStateEntry, syncLegacyEntry, localLegacyEntry] = await Promise.all([
+    readStorageValue<PinsState>('sync', STORAGE_STATE_KEY),
+    readStorageValue<PinsState>('local', STORAGE_STATE_KEY),
+    readStorageValue<any[]>('sync', STORAGE_KEY),
+    readStorageValue<any[]>('local', STORAGE_KEY),
+  ]);
+
+  const syncState = syncStateEntry.found
+    ? normalizePinsState(syncStateEntry.value)
+    : buildPinsStateFromList(normalizeList(syncLegacyEntry.value));
+  const localState = localStateEntry.found
+    ? normalizePinsState(localStateEntry.value)
+    : buildPinsStateFromList(normalizeList(localLegacyEntry.value));
+
+  const syncHasData = hasPinsStateData(syncState);
+  const localHasData = hasPinsStateData(localState);
+  const authoritative = syncHasData ? syncState : localState;
+  const authoritativeList = derivePinnedUpsFromState(authoritative);
+
+  const syncRawList = normalizeList(syncLegacyEntry.value);
+  const localRawList = normalizeList(localLegacyEntry.value);
+  const syncStateChanged = serializePinsState(syncState) !== serializePinsState(authoritative);
+  const localStateChanged = serializePinsState(localState) !== serializePinsState(authoritative);
+  const syncRawChanged = serializeList(syncRawList) !== serializeList(authoritativeList);
+  const localRawChanged = serializeList(localRawList) !== serializeList(authoritativeList);
+
+  if (!syncHasData && localHasData && (syncStateChanged || syncRawChanged)) {
+    await writePinsSnapshotToArea('sync', authoritative);
   }
+
+  if (syncHasData && (localStateChanged || localRawChanged)) {
+    await writePinsSnapshotToArea('local', authoritative);
+  }
+
+  return authoritative;
 }
 
 export async function getPinnedUps(): Promise<PinnedUp[]> {
-  const list = await storageGet<any[]>(STORAGE_KEY, []);
-  const raw = Array.isArray(list) ? list : [];
-  const normalized = raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[];
-  const next = uniqByUid(normalized);
-
-  // 如果发生了迁移/去重，写回一次，清理“脏数据”
-  const beforeKey = JSON.stringify(
-    raw.map((x) => [String(x.mid ?? x.uid ?? '').trim(), String(x.face ?? '').trim()]),
-  );
-  const afterKey = JSON.stringify(next.map((x) => [x.mid, String(x.face ?? '').trim()]));
-  if (beforeKey !== afterKey) {
-    await storageSet(STORAGE_KEY, next);
-  }
-
-  return next;
+  const state = await getAuthoritativePinsState();
+  return derivePinnedUpsFromState(state);
 }
 
 // 事件监听
 type PinsChangeListener = (pins: PinnedUp[]) => void;
 const listeners = new Set<PinsChangeListener>();
+let stopStorageObserver: (() => void) | null = null;
+let lastNotifiedSnapshot = '';
 
 export function onPinsChange(callback: PinsChangeListener): () => void {
+  ensureStorageObserver();
   listeners.add(callback);
-  return () => listeners.delete(callback);
+  return () => {
+    listeners.delete(callback);
+    if (listeners.size === 0 && stopStorageObserver) {
+      stopStorageObserver();
+      stopStorageObserver = null;
+    }
+  };
 }
 
 function notifyListeners(pins: PinnedUp[]) {
+  lastNotifiedSnapshot = serializeList(pins);
   for (const cb of listeners) {
     try {
       cb(pins);
@@ -128,14 +281,74 @@ function notifyListeners(pins: PinnedUp[]) {
   }
 }
 
+function ensureStorageObserver() {
+  if (stopStorageObserver) return;
+
+  let scheduled = false;
+  stopStorageObserver = observeStorageChanges([STORAGE_KEY, STORAGE_STATE_KEY], () => {
+    if (scheduled) return;
+    scheduled = true;
+    queueMicrotask(async () => {
+      scheduled = false;
+      if (listeners.size === 0) return;
+      try {
+        const pins = await getPinnedUps();
+        const snapshot = serializeList(pins);
+        if (snapshot === lastNotifiedSnapshot) return;
+        notifyListeners(pins);
+      } catch (error) {
+        console.warn('[bili-pin] failed to refresh pins from storage change', error);
+      }
+    });
+  });
+}
+
 export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
-  const raw = Array.isArray(list) ? list : [];
-  const normalized = raw.map((x) => normalizeItem(x)).filter(Boolean) as PinnedUp[];
-  const next = uniqByUid(normalized);
-  await storageSet(STORAGE_KEY, next);
-  
+  const currentState = await getAuthoritativePinsState();
+  const currentItems = getStateItemMap(currentState);
+  const nextList = uniqByUid(
+    (Array.isArray(list) ? list : []).map((item) => normalizeItem(item)).filter(Boolean) as PinnedUp[],
+  );
+  const nextMidSet = new Set(nextList.map((item) => item.mid));
+  const now = Date.now();
+  const nextItems: SyncedPinnedUp[] = [];
+  const nextRemoved: Record<string, number> = { ...currentState.removed };
+
+  for (const item of nextList) {
+    const existing = currentItems.get(item.mid);
+    const changed =
+      !existing ||
+      existing.name !== item.name ||
+      existing.face !== item.face ||
+      existing.pinnedAt !== item.pinnedAt;
+    nextItems.push({
+      mid: item.mid,
+      name: item.name,
+      face: item.face,
+      pinnedAt: item.pinnedAt,
+      updatedAt: changed ? now : existing.updatedAt,
+    });
+    delete nextRemoved[item.mid];
+  }
+
+  for (const item of currentItems.values()) {
+    if (nextMidSet.has(item.mid)) continue;
+    nextRemoved[item.mid] = Math.max(nextRemoved[item.mid] ?? 0, now);
+  }
+
+  const nextState: PinsState = {
+    version: 2,
+    items: nextItems,
+    removed: nextRemoved,
+    order: nextList.map((item) => item.mid),
+    orderUpdatedAt: now,
+    updatedAt: now,
+  };
+
+  await writePinsSnapshot(nextState);
+
   // 通知监听器
-  notifyListeners(next);
+  notifyListeners(nextList);
 }
 
 export async function isPinned(mid: string): Promise<boolean> {
