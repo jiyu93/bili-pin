@@ -1,8 +1,10 @@
 /**
  * storage bridge（ISOLATED world）
  *
- * 目的：让 MAIN world 代码也能稳定读写 `chrome.storage.local/sync`，避免退回页面 localStorage。
+ * 目的：让 MAIN world 代码也能稳定读写 `chrome.storage.local/sync`。
  */
+
+import { STORAGE_BRIDGE_ALLOWED_KEYS } from '../src/storage/keys';
 
 type StorageAreaName = 'local' | 'sync';
 
@@ -52,19 +54,9 @@ function isRequest(data: unknown): data is BridgeRequest {
   return d.__biliPin === 1 && (d.kind === 'storage:get' || d.kind === 'storage:set') && typeof d.requestId === 'string';
 }
 
-
-const ALLOWED_KEYS = [
-  'biliPin.pins.v1',
-  'biliPin.pins.state.v2',
-  'biliPin.ui.pinBarExpanded.v1',
-  'biliPin.ui.pinBarExpanded.state.v2',
-  'biliPin.syncMeta.v1',
-  'biliPin.syncMigration.v1',
-];
-
 function isAllowedKey(key: string): boolean {
   // 必须是 biliPin. 开头，防止污染其他数据
-  return key.startsWith('biliPin.') && ALLOWED_KEYS.includes(key);
+  return key.startsWith('biliPin.') && STORAGE_BRIDGE_ALLOWED_KEYS.includes(key as (typeof STORAGE_BRIDGE_ALLOWED_KEYS)[number]);
 }
 
 async function chromeStorageGet<T>(area: StorageAreaName, key: string): Promise<{ found: boolean; value?: T }> {

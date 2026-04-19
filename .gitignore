@@ -2,8 +2,8 @@ node_modules/
 .output/
 .wxt/
 dist/
+.DS_Store
 *.log
 debug/
 .dev/
 *.pem
-

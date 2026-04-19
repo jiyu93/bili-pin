@@ -1,9 +1,12 @@
-const KEYS = [
-  'biliPin.pins.v1',
-  'biliPin.pins.state.v2',
-  'biliPin.ui.pinBarExpanded.state.v2',
-  'biliPin.syncMeta.v1',
-];
+// 与 src/storage/keys.ts 保持同步。
+const STORAGE_KEYS = {
+  pins: 'biliPin.pins.v1',
+  pinsState: 'biliPin.pins.state.v2',
+  pinBarExpandedState: 'biliPin.ui.pinBarExpanded.state.v2',
+  syncMeta: 'biliPin.syncMeta.v1',
+};
+
+const KEYS = Object.values(STORAGE_KEYS);
 
 async function getAreaSnapshot(area) {
   return await new Promise((resolve, reject) => {
@@ -33,12 +36,12 @@ function formatDateTime(value) {
 }
 
 function getPinsCount(snapshot) {
-  return Array.isArray(snapshot['biliPin.pins.v1']) ? snapshot['biliPin.pins.v1'].length : 0;
+  return Array.isArray(snapshot[STORAGE_KEYS.pins]) ? snapshot[STORAGE_KEYS.pins].length : 0;
 }
 
 function getLatestUpdatedAt(snapshot) {
-  const pinsUpdatedAt = Number(snapshot['biliPin.pins.state.v2']?.updatedAt ?? 0) || 0;
-  const expandedUpdatedAt = Number(snapshot['biliPin.ui.pinBarExpanded.state.v2']?.updatedAt ?? 0) || 0;
+  const pinsUpdatedAt = Number(snapshot[STORAGE_KEYS.pinsState]?.updatedAt ?? 0) || 0;
+  const expandedUpdatedAt = Number(snapshot[STORAGE_KEYS.pinBarExpandedState]?.updatedAt ?? 0) || 0;
   return Math.max(pinsUpdatedAt, expandedUpdatedAt);
 }
 
@@ -53,7 +56,7 @@ async function refresh() {
       getAreaSnapshot('local'),
     ]);
 
-    const lastSyncWriteAt = Number(localSnapshot['biliPin.syncMeta.v1']?.lastSyncWriteAt ?? 0) || 0;
+    const lastSyncWriteAt = Number(localSnapshot[STORAGE_KEYS.syncMeta]?.lastSyncWriteAt ?? 0) || 0;
     const localUpdatedAt = getLatestUpdatedAt(localSnapshot);
     const syncUpdatedAt = getLatestUpdatedAt(syncSnapshot);
     const lastSyncedAt = Math.max(lastSyncWriteAt, localUpdatedAt, syncUpdatedAt);

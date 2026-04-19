@@ -5,9 +5,7 @@ import {
   type StorageAreaName,
   type StorageReadResult,
 } from '../utils/bridgeClient';
-
-const SYNC_MIGRATION_KEY = 'biliPin.syncMigration.v1';
-export const SYNC_META_KEY = 'biliPin.syncMeta.v1';
+import { SYNC_META_KEY, SYNC_MIGRATION_KEY } from './keys';
 
 type MigrationState = Record<string, 1>;
 export type SyncMeta = {
@@ -59,20 +57,8 @@ export async function readStorageValue<T>(
   try {
     return await bridgeStorageGet<T>(area, key);
   } catch {
-    // ignore and continue to localStorage fallback
+    return { found: false };
   }
-
-  if (area === 'local') {
-    try {
-      const raw = globalThis.localStorage?.getItem(key);
-      if (raw == null) return { found: false };
-      return { found: true, value: JSON.parse(raw) as T };
-    } catch {
-      return { found: false };
-    }
-  }
-
-  return { found: false };
 }
 
 export async function writeStorageValue<T>(
@@ -95,19 +81,7 @@ export async function writeStorageValue<T>(
     return;
   }
 
-  try {
-    await bridgeStorageSet(area, key, value);
-    return;
-  } catch {
-    // ignore and continue to localStorage fallback
-  }
-
-  if (area === 'local') {
-    globalThis.localStorage?.setItem(key, JSON.stringify(value));
-    return;
-  }
-
-  throw new Error(`storage area "${area}" is not available`);
+  await bridgeStorageSet(area, key, value);
 }
 
 async function getMigrationState(): Promise<MigrationState> {

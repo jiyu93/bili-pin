@@ -8,6 +8,7 @@
   - 置顶栏展开状态也改为按更新时间收敛，并通过 `chrome.storage.onChanged` 桥接让已打开页面能主动响应远端 `sync` 变化。
   - 支持从 `config/manifest-key.txt` 读取固定 `manifest.key`，保证两台电脑本地调试时保持相同扩展 ID。
   - 扩展图标弹窗调整为简洁同步摘要，只展示头像数量和最后同步时间，并修复 MV3 下内联脚本不执行导致的空白问题。
+  - 收尾清理：移除页面 `localStorage` 存储兜底，收敛生产环境调试桥与控制台诊断输出，并补上 `npm run typecheck`。
 
 ## v1.1.0
 - **配置同步**：

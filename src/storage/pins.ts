@@ -1,6 +1,7 @@
 // 注意：本项目的“UP 唯一标识”使用 B 站 mid（数字字符串）
 
 import { observeStorageChanges, readStorageValue, writeMirroredConfig, writeStorageValue } from './config';
+import { PINS_KEY as STORAGE_KEY, PINS_STATE_KEY as STORAGE_STATE_KEY } from './keys';
 
 export type PinnedUp = {
   mid: string;
@@ -8,9 +9,6 @@ export type PinnedUp = {
   face?: string;
   pinnedAt: number;
 };
-
-const STORAGE_KEY = 'biliPin.pins.v1';
-const STORAGE_STATE_KEY = 'biliPin.pins.state.v2';
 
 type SyncedPinnedUp = PinnedUp & {
   updatedAt: number;

@@ -51,6 +51,7 @@
 ### 跨设备本地调试（保持相同扩展 ID）
 
 - 项目会优先读取 `config/manifest-key.txt` 中的公钥作为 `manifest.key`，这样两台电脑加载同一份源码构建产物时会得到同一个扩展 ID。
+- 仓库中的 `config/manifest-key.txt` 是公开的 Chrome Web Store public key，属于刻意提交的公开配置，不是私钥。
 - 你只需要把同一个 `config/manifest-key.txt` 保持在两台电脑一致即可。
 - 如果后续需要重新生成固定身份，请保留你自己的私钥文件；仓库里只需要公钥文本。
 
@@ -64,6 +65,9 @@ npm run dev
 
 # 构建生产版本
 npm run build
+
+# 运行类型检查
+npm run typecheck
 
 # 打包发布文件 (.zip)
 npm run zip

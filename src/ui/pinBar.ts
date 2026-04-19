@@ -2,14 +2,12 @@ import Sortable from 'sortablejs';
 import type { PinnedUp } from '../storage/pins';
 import { getUpUpdateStatus, markUpAsRead } from '../bili/apiInterceptor';
 import { readStorageValue, writeMirroredConfig, writeStorageValue } from '../storage/config';
+import { PIN_BAR_EXPANDED_KEY, PIN_BAR_EXPANDED_STATE_KEY } from '../storage/keys';
 
 export const PIN_BAR_ID = 'bili-pin-pinbar';
 export const PIN_BAR_LIST_ID = 'bili-pin-pinbar-list';
 export const PIN_BAR_TOGGLE_ID = 'bili-pin-pinbar-toggle';
 export const PIN_BAR_COUNT_ID = 'bili-pin-pinbar-count';
-
-const PIN_BAR_EXPANDED_KEY = 'biliPin.ui.pinBarExpanded.v1';
-const PIN_BAR_EXPANDED_STATE_KEY = 'biliPin.ui.pinBarExpanded.state.v2';
 
 type BoolState = {
   value: boolean;

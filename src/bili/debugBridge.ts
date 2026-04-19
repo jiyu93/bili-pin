@@ -1,8 +1,11 @@
 import { getUpAvatarStripDiagnostics } from './selectors';
 import { getAllCachedUpInfo } from './apiInterceptor';
 import { getPinnedUps } from '../storage/pins';
+import { isDebugEnabled } from './debugFlag';
 
 export function installDebugBridge() {
+  if (!isDebugEnabled()) return;
+
   // 只安装一次
   const key = '__biliPinBridgeInstalled';
   if ((window as any)[key]) return;
@@ -24,5 +27,4 @@ export function installDebugBridge() {
     },
   };
 }
-
 

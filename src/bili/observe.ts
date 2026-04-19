@@ -1,4 +1,5 @@
 import { findUpAvatarStripRoot, getUpAvatarStripDiagnostics } from './selectors';
+import { debugLog, isDebugEnabled } from './debugFlag';
 
 export type UpStripFoundHandler = (stripRoot: HTMLElement) => void;
 
@@ -23,10 +24,10 @@ export function observeUpAvatarStrip(handler: UpStripFoundHandler): () => void {
       // 避免刷屏：连续多次找不到后，仅输出一次诊断信息
       if (!loggedNotFound && missCount >= 12) {
         loggedNotFound = true;
-        console.info('[bili-pin] 关注UP推荐列表未定位到', getUpAvatarStripDiagnostics());
-        console.info(
-          '[bili-pin] tip: you can run `window.__biliPin?.dump()` in console to re-print diagnostics',
-        );
+        debugLog('[bili-pin] 关注UP推荐列表未定位到', getUpAvatarStripDiagnostics());
+        if (isDebugEnabled()) {
+          debugLog('[bili-pin] tip: you can run `window.__biliPin?.dump()` in console to re-print diagnostics');
+        }
       }
       return;
     }
@@ -58,5 +59,4 @@ export function observeUpAvatarStrip(handler: UpStripFoundHandler): () => void {
     window.removeEventListener('popstate', schedule);
   };
 }
-
 

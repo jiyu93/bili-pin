@@ -17,6 +17,7 @@
 - **构建命令**：
   - `npm run dev` — 启动开发服务器（热重载）
   - `npm run build` — 构建生产版本（输出至 `.output/chrome-mv3`）
+  - `npm run typecheck` — 进行 TypeScript 静态检查
   - `npm run zip` — 打包发布文件
 - **依赖**：`sortablejs`（拖拽排序）
 
@@ -59,6 +60,7 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 
 ### 3.2 数据存储
 - 使用 **`chrome.storage.sync` + `chrome.storage.local` 镜像写入**：`sync` 作为跨设备同步主存储，`local` 保留同机镜像与回退能力。
+- `MAIN` world 内的存储访问统一走 `chrome.storage` / storage bridge，不再回退到页面 `localStorage`。
 - 版本升级时必须先读取旧 `local` 配置并迁移到 `sync`，禁止直接用空的同步配置覆盖已有本地数据。
 - 状态管理核心文件：`src/storage/config.ts`、`src/storage/pins.ts`。
 - 响应式机制：修改数据后广播 `onPinsChange` 事件，所有 UI 组件监听并自动重绘。
@@ -92,7 +94,7 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 
 ## 5. 调试与验证
 
-- **调试工具**：在页面控制台输入 `window.__biliPin.dump()` 可查看诊断信息。
+- **调试工具**：先在 DevTools 执行 `localStorage.setItem('biliPin.debug','1')` 并刷新页面，再在控制台输入 `window.__biliPin.dump()` 查看诊断信息；调试结束后执行 `localStorage.removeItem('biliPin.debug')`。
 - **同步摘要弹窗**：点击扩展工具栏图标，可查看头像数量与最后同步时间，用于快速确认跨设备同步是否收敛。
 - **验收清单**（每次改动后按场景自测）：
   - [ ] 动态页置顶栏显示正常，且能拖拽排序。
@@ -110,7 +112,7 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 **当前版本：`v1.1.1`**
 
 ### 已完成（最近在上面的变更）
-- `v1.1.1`：补完配置同步闭环；修复跨设备同步分叉问题，将 `chrome.storage.sync` 明确为权威配置，`chrome.storage.local` 仅作为镜像与回退副本，避免两台设备持续各自坚持本地状态；置顶列表保留带时间戳的同步状态与删除墓碑，置顶栏展开状态也改为按更新时间收敛；通过 `storage.onChanged` 将远端 `sync` 变化主动回灌给已打开页面；支持从 `config/manifest-key.txt` 读取固定 `manifest.key`，便于两台电脑本地调试时保持相同扩展 ID；扩展图标弹窗收敛为头像数量和最后同步时间，并修复 MV3 下内联脚本不执行导致的空白问题，同时优化为更紧凑的卡片式样式。
+- `v1.1.1`：补完配置同步闭环；修复跨设备同步分叉问题，将 `chrome.storage.sync` 明确为权威配置，`chrome.storage.local` 仅作为镜像与回退副本，避免两台设备持续各自坚持本地状态；置顶列表保留带时间戳的同步状态与删除墓碑，置顶栏展开状态也改为按更新时间收敛；通过 `storage.onChanged` 将远端 `sync` 变化主动回灌给已打开页面；支持从 `config/manifest-key.txt` 读取固定 `manifest.key`，便于两台电脑本地调试时保持相同扩展 ID；扩展图标弹窗收敛为头像数量和最后同步时间，并修复 MV3 下内联脚本不执行导致的空白问题，同时优化为更紧凑的卡片式样式；补做收尾清理，收紧生产环境调试桥与控制台诊断输出、抽出统一 storage key 常量，并补上 `npm run typecheck`。
 - `v1.1.0`：新增配置同步能力；置顶列表与置顶栏展开状态改为 `chrome.storage.sync` / `chrome.storage.local` 双写；首次升级会把既有本地配置迁移到同步存储，避免更新后配置被空同步数据覆盖。
 - `v1.0.4`：移除不必要的 `host_permissions`；收窄 API 拦截脚本注入范围（仅限视频页）；清理废弃 API 调用代码。
 - `v1.0.3`：修复视频播放页长时间挂机后因 `MutationObserver` 死循环导致的 OOM 崩溃。
