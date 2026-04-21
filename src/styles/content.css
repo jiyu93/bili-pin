@@ -7,10 +7,11 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
 
 /* 置顶栏 */
 .bili-pin-bar {
+  position: relative;
   width: 100%;
   box-sizing: border-box;
   margin: 8px 0;
-  padding: 10px 2px; /* 10px 12px -> 10px 2px, 总左padding为 2+4=6px */
+  padding: 10px 2px 18px;
   background: var(--bg1_float, #ffffff);
   border: 1px solid var(--line_regular, #e3e5e7);
   border-radius: 10px;
@@ -18,13 +19,15 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   --bili-pin-face-size: 44px;
   --bili-pin-name-font-size: 12px;
   --bili-pin-name-line-height: 16px;
-  --bili-pin-collapsed-max-height: 85px;
+  --bili-pin-bar-min-height: 104px;
+  --bili-pin-bar-default-height: 120px;
+  --bili-pin-bar-max-height: 480px;
 }
 
 .bili-pin-bar__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
   margin-bottom: 8px;
   padding: 0 15px;
@@ -54,32 +57,63 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   color: var(--text2, #61666d);
 }
 
-.bili-pin-bar__toggle {
-  font-size: 12px;
-  line-height: 1;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line_regular, #e3e5e7);
-  background: var(--bg1_float, #ffffff);
-  color: var(--text2, #61666d);
-  cursor: pointer;
-}
-
 .bili-pin-bar__list {
   display: grid;
   grid-template-columns: repeat(auto-fill, var(--bili-pin-item-width));
   gap: var(--bili-pin-gap, 10px); /* 14px -> 动态或10px */
   justify-content: start;
-  overflow: hidden;
-  padding: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: var(--bili-pin-bar-min-height);
+  max-height: var(--bili-pin-bar-max-height);
+  height: var(--bili-pin-bar-default-height);
+  padding: 10px 12px 10px 10px;
+  scrollbar-gutter: stable;
 }
 
-.bili-pin-bar__list.is-collapsed {
-  max-height: var(--bili-pin-collapsed-max-height);
+.bili-pin-bar__resize {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  width: 52px;
+  height: 10px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: ns-resize;
 }
 
-.bili-pin-bar__list.is-expanded {
-  max-height: none;
+.bili-pin-bar__resize::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin: 3px 0;
+  border-radius: 999px;
+  background: var(--line_regular, #e3e5e7);
+  transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.bili-pin-bar__resize:hover::before,
+.bili-pin-bar[data-resizing='1'] .bili-pin-bar__resize::before {
+  background: var(--brand_blue, #00a1d6);
+  box-shadow: 0 0 0 4px rgba(0, 161, 214, 0.12);
+  transform: scaleY(1.05);
+}
+
+.bili-pin-bar__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.bili-pin-bar__list::-webkit-scrollbar-thumb {
+  background: var(--bg3, rgba(0, 0, 0, 0.12));
+  border-radius: 999px;
+}
+
+.bili-pin-bar__list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .bili-pin-bar__empty {
@@ -323,4 +357,3 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   transform: translateY(0);
   transition: opacity 120ms ease, transform 120ms ease, visibility 0ms;
 }
-

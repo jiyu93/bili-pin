@@ -82,7 +82,7 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 
 | 功能 | 入口文件 | 核心逻辑文件 | 备注 |
 |------|---------|-------------|------|
-| **动态页置顶栏 & Feed 切换** | `entrypoints/content.ts` | `src/ui/pinBar.ts` (渲染), `src/bili/feedSwitch.ts` (切换逻辑) | 使用 `sortablejs` 实现拖拽排序。 |
+| **动态页置顶栏 & Feed 切换** | `entrypoints/content.ts` | `src/ui/pinBar.ts` (渲染/高度持久化), `src/bili/feedSwitch.ts` (切换逻辑) | 使用 `sortablejs` 实现拖拽排序，置顶栏支持纵向拉伸和滚动。 |
 | **动态页推荐栏图钉按钮** | - | `src/ui/injectPinButtons.ts` | 在头像容器右上角插入图钉按钮。 |
 | **动态卡片菜单置顶选项** | - | `src/ui/dynamicMoreMenuPin.ts` | **克隆**原生"三点菜单"项插入。 |
 | **空间页/视频页菜单置顶** | `entrypoints/space.content.ts`, `video.content.ts` | 各自入口文件内实现 | 监听"已关注"按钮 hover 弹层 (`.vui_popover` / `.van-popover`)，**克隆**原生菜单项插入。难点：通过 `mouseover` 追踪和 API 缓存识别当前 hover 的是哪个 UP。 |
@@ -109,9 +109,10 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 
 ## 6. 当前状态与近期变更
 
-**当前版本：`v1.1.1`**
+**当前版本：`v1.1.2`**
 
 ### 已完成（最近在上面的变更）
+- `v1.1.2`：将动态页置顶栏从单一“展开/收起”切换为可自由纵向拉伸的滚动容器；置顶头像过多时可通过底部正中央的拖拽手柄调整高度，并通过纵向滚动条浏览完整列表；新增置顶栏高度的 `sync/local` 镜像存储与时间戳状态，已打开页面刷新后仍保留上次拉伸结果，同时兼容旧版展开状态作为一次性迁移回退；移除头部“恢复默认高度”按钮，改为更克制的底部拖拽交互。涉及文件：`src/ui/pinBar.ts`、`src/styles/content.css`、`src/storage/keys.ts`、`package.json`、`wxt.config.ts`。验证：`npm run typecheck` 通过，页面上需重点确认底部手柄拖拽、高度持久化、滚动浏览，以及点击头像切换 Feed/拖拽排序未回归；`npm run build` 后产物 manifest 版本应为 `1.1.2`。
 - `v1.1.1`：补完配置同步闭环；修复跨设备同步分叉问题，将 `chrome.storage.sync` 明确为权威配置，`chrome.storage.local` 仅作为镜像与回退副本，避免两台设备持续各自坚持本地状态；置顶列表保留带时间戳的同步状态与删除墓碑，置顶栏展开状态也改为按更新时间收敛；通过 `storage.onChanged` 将远端 `sync` 变化主动回灌给已打开页面；支持从 `config/manifest-key.txt` 读取固定 `manifest.key`，便于两台电脑本地调试时保持相同扩展 ID；扩展图标弹窗收敛为头像数量和最后同步时间，并修复 MV3 下内联脚本不执行导致的空白问题，同时优化为更紧凑的卡片式样式；补做收尾清理，收紧生产环境调试桥与控制台诊断输出、抽出统一 storage key 常量，并补上 `npm run typecheck`。
 - `v1.1.0`：新增配置同步能力；置顶列表与置顶栏展开状态改为 `chrome.storage.sync` / `chrome.storage.local` 双写；首次升级会把既有本地配置迁移到同步存储，避免更新后配置被空同步数据覆盖。
 - `v1.0.4`：移除不必要的 `host_permissions`；收窄 API 拦截脚本注入范围（仅限视频页）；清理废弃 API 调用代码。

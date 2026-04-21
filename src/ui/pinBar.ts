@@ -2,15 +2,30 @@ import Sortable from 'sortablejs';
 import type { PinnedUp } from '../storage/pins';
 import { getUpUpdateStatus, markUpAsRead } from '../bili/apiInterceptor';
 import { readStorageValue, writeMirroredConfig, writeStorageValue } from '../storage/config';
-import { PIN_BAR_EXPANDED_KEY, PIN_BAR_EXPANDED_STATE_KEY } from '../storage/keys';
+import {
+  PIN_BAR_EXPANDED_KEY,
+  PIN_BAR_EXPANDED_STATE_KEY,
+  PIN_BAR_HEIGHT_KEY,
+  PIN_BAR_HEIGHT_STATE_KEY,
+} from '../storage/keys';
 
 export const PIN_BAR_ID = 'bili-pin-pinbar';
 export const PIN_BAR_LIST_ID = 'bili-pin-pinbar-list';
-export const PIN_BAR_TOGGLE_ID = 'bili-pin-pinbar-toggle';
 export const PIN_BAR_COUNT_ID = 'bili-pin-pinbar-count';
+export const PIN_BAR_RESIZE_ID = 'bili-pin-pinbar-resize';
+
+const PIN_BAR_MIN_HEIGHT = 104;
+const PIN_BAR_DEFAULT_HEIGHT = 120;
+const PIN_BAR_EXPANDED_FALLBACK_HEIGHT = 236;
+const PIN_BAR_MAX_HEIGHT = 480;
 
 type BoolState = {
   value: boolean;
+  updatedAt: number;
+};
+
+type NumberState = {
+  value: number;
   updatedAt: number;
 };
 
@@ -72,20 +87,93 @@ async function storageGetBool(key: string, fallback: boolean): Promise<boolean> 
   return authoritative.value;
 }
 
-async function storageSetBool(key: string, value: boolean): Promise<void> {
-  const state: BoolState = {
-    value,
+function normalizePinBarHeight(value: number): number {
+  if (!Number.isFinite(value)) return PIN_BAR_DEFAULT_HEIGHT;
+  return Math.max(PIN_BAR_MIN_HEIGHT, Math.min(PIN_BAR_MAX_HEIGHT, Math.round(value)));
+}
+
+async function storageGetPinBarHeight(): Promise<number> {
+  const [syncStateEntry, localStateEntry, syncLegacyEntry, localLegacyEntry] = await Promise.all([
+    readStorageValue<NumberState>('sync', PIN_BAR_HEIGHT_STATE_KEY),
+    readStorageValue<NumberState>('local', PIN_BAR_HEIGHT_STATE_KEY),
+    readStorageValue<number>('sync', PIN_BAR_HEIGHT_KEY),
+    readStorageValue<number>('local', PIN_BAR_HEIGHT_KEY),
+  ]);
+
+  const syncState = syncStateEntry.found
+    ? {
+        value: normalizePinBarHeight(Number(syncStateEntry.value?.value)),
+        updatedAt: Number(syncStateEntry.value?.updatedAt ?? 0) || 0,
+      }
+    : syncLegacyEntry.found
+      ? { value: normalizePinBarHeight(Number(syncLegacyEntry.value)), updatedAt: 0 }
+      : null;
+  const localState = localStateEntry.found
+    ? {
+        value: normalizePinBarHeight(Number(localStateEntry.value?.value)),
+        updatedAt: Number(localStateEntry.value?.updatedAt ?? 0) || 0,
+      }
+    : localLegacyEntry.found
+      ? { value: normalizePinBarHeight(Number(localLegacyEntry.value)), updatedAt: 0 }
+      : null;
+
+  let authoritative = syncState ?? localState ?? null;
+  if (!authoritative) {
+    const expanded = await storageGetBool(PIN_BAR_EXPANDED_KEY, false);
+    authoritative = {
+      value: expanded ? PIN_BAR_EXPANDED_FALLBACK_HEIGHT : PIN_BAR_DEFAULT_HEIGHT,
+      updatedAt: 0,
+    };
+  }
+
+  const syncLegacyValue = syncLegacyEntry.found ? normalizePinBarHeight(Number(syncLegacyEntry.value)) : authoritative.value;
+  const localLegacyValue = localLegacyEntry.found ? normalizePinBarHeight(Number(localLegacyEntry.value)) : authoritative.value;
+  const syncStateDirty =
+    !syncStateEntry.found || !syncState || syncState.value !== authoritative.value || syncState.updatedAt !== authoritative.updatedAt;
+  const localStateDirty =
+    !localStateEntry.found || !localState || localState.value !== authoritative.value || localState.updatedAt !== authoritative.updatedAt;
+  const syncLegacyDirty = !syncLegacyEntry.found || syncLegacyValue !== authoritative.value;
+  const localLegacyDirty = !localLegacyEntry.found || localLegacyValue !== authoritative.value;
+
+  if ((!syncState || syncStateDirty || syncLegacyDirty) && authoritative) {
+    await writeStorageValue('sync', PIN_BAR_HEIGHT_STATE_KEY, authoritative);
+    await writeStorageValue('sync', PIN_BAR_HEIGHT_KEY, authoritative.value);
+  }
+
+  if ((!localState || localStateDirty || localLegacyDirty) && authoritative) {
+    await writeStorageValue('local', PIN_BAR_HEIGHT_STATE_KEY, authoritative);
+    await writeStorageValue('local', PIN_BAR_HEIGHT_KEY, authoritative.value);
+  }
+
+  return authoritative.value;
+}
+
+async function storageSetPinBarHeight(value: number): Promise<void> {
+  const normalized = normalizePinBarHeight(value);
+  const state: NumberState = {
+    value: normalized,
     updatedAt: Date.now(),
   };
-  await writeMirroredConfig(PIN_BAR_EXPANDED_STATE_KEY, state);
-  await writeMirroredConfig(key, value);
+  await writeMirroredConfig(PIN_BAR_HEIGHT_STATE_KEY, state);
+  await writeMirroredConfig(PIN_BAR_HEIGHT_KEY, normalized);
+}
+
+function applyPinBarHeight(list: HTMLElement, height: number): void {
+  const normalized = normalizePinBarHeight(height);
+  list.style.height = `${normalized}px`;
+  list.dataset.persistedHeight = String(normalized);
 }
 
 export async function ensurePinBarPrefs(bar: HTMLElement): Promise<void> {
   if (bar.dataset.prefsLoaded === '1') return;
   bar.dataset.prefsLoaded = '1';
-  const expanded = await storageGetBool(PIN_BAR_EXPANDED_KEY, false);
-  bar.dataset.expanded = expanded ? '1' : '0';
+  const list = bar.querySelector<HTMLElement>(`#${PIN_BAR_LIST_ID}`);
+  if (!list) return;
+
+  const height = await storageGetPinBarHeight();
+  applyPinBarHeight(list, height);
+  list.dataset.resizeReady = '1';
+  updatePinBarLayout(bar);
 }
 
 export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
@@ -95,7 +183,6 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
   const bar = document.createElement('div');
   bar.id = PIN_BAR_ID;
   bar.className = 'bili-pin-bar';
-  bar.dataset.expanded = '0';
 
   const header = document.createElement('div');
   header.className = 'bili-pin-bar__header';
@@ -115,33 +202,24 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
   title.appendChild(titleText);
   title.appendChild(count);
 
-  const toggle = document.createElement('button');
-  toggle.id = PIN_BAR_TOGGLE_ID;
-  toggle.type = 'button';
-  toggle.className = 'bili-pin-bar__toggle';
-  toggle.textContent = '展开';
-  toggle.style.display = 'none';
-  toggle.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const next = bar.dataset.expanded === '1' ? '0' : '1';
-    bar.dataset.expanded = next;
-    // 记住展开/收起状态
-    storageSetBool(PIN_BAR_EXPANDED_KEY, next === '1').catch(() => {});
-    // 切换后重新计算是否需要按钮/文案
-    requestAnimationFrame(() => updatePinBarCollapse(bar));
-  });
-
   header.appendChild(title);
-  header.appendChild(toggle);
 
   const list = document.createElement('div');
   list.id = PIN_BAR_LIST_ID;
   list.className = 'bili-pin-bar__list';
-  list.classList.add('is-collapsed');
+
+  const resize = document.createElement('button');
+  resize.id = PIN_BAR_RESIZE_ID;
+  resize.type = 'button';
+  resize.className = 'bili-pin-bar__resize';
+  resize.setAttribute('aria-label', '拖动调整置顶栏高度');
+  resize.title = '拖动调整高度';
 
   bar.appendChild(header);
   bar.appendChild(list);
+  bar.appendChild(resize);
+  ensurePinBarResizePersistence(bar, list);
+  ensurePinBarResizeHandle(bar, list, resize);
 
   // 插到“关注UP推荐列表”上方
   // 注意：`.bili-dyn-up-list` 通常是 flex 容器，若把 bar 插在其内部会与关注UP推荐列表同一行分宽度
@@ -156,41 +234,80 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
   return bar;
 }
 
-function updatePinBarCollapse(bar: HTMLElement): void {
-  const list = bar.querySelector<HTMLElement>(`#${PIN_BAR_LIST_ID}`);
-  const toggle = bar.querySelector<HTMLButtonElement>(`#${PIN_BAR_TOGGLE_ID}`);
-  const countEl = bar.querySelector<HTMLElement>(`#${PIN_BAR_COUNT_ID}`);
-  if (!list || !toggle) return;
+function ensurePinBarResizePersistence(bar: HTMLElement, list: HTMLElement): void {
+  if (list.dataset.resizeObserverInstalled === '1') return;
+  list.dataset.resizeObserverInstalled = '1';
 
-  const expanded = bar.dataset.expanded === '1';
-  list.classList.toggle('is-expanded', expanded);
-  list.classList.toggle('is-collapsed', !expanded);
+  let saveTimer = 0;
+  const observer = new ResizeObserver(() => {
+    if (list.dataset.resizeReady !== '1') return;
+    const nextHeight = normalizePinBarHeight(list.getBoundingClientRect().height);
+    const prevHeight = Number(list.dataset.persistedHeight || '0');
+    if (nextHeight === prevHeight) return;
+
+    list.dataset.persistedHeight = String(nextHeight);
+    if (saveTimer) {
+      window.clearTimeout(saveTimer);
+    }
+    saveTimer = window.setTimeout(() => {
+      storageSetPinBarHeight(nextHeight).catch(() => {});
+      updatePinBarLayout(bar);
+    }, 120);
+  });
+
+  observer.observe(list);
+}
+
+function ensurePinBarResizeHandle(bar: HTMLElement, list: HTMLElement, handle: HTMLButtonElement): void {
+  if (handle.dataset.dragInstalled === '1') return;
+  handle.dataset.dragInstalled = '1';
+
+  let dragging = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  const finishDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    bar.dataset.resizing = '0';
+    window.removeEventListener('pointermove', onPointerMove, true);
+    window.removeEventListener('pointerup', onPointerUp, true);
+    window.removeEventListener('pointercancel', onPointerUp, true);
+  };
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (!dragging) return;
+    event.preventDefault();
+    const nextHeight = normalizePinBarHeight(startHeight + (event.clientY - startY));
+    applyPinBarHeight(list, nextHeight);
+    updatePinBarLayout(bar);
+  };
+
+  const onPointerUp = () => {
+    finishDrag();
+  };
+
+  handle.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragging = true;
+    startY = event.clientY;
+    startHeight = list.getBoundingClientRect().height;
+    bar.dataset.resizing = '1';
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    window.addEventListener('pointercancel', onPointerUp, true);
+  });
+}
+
+function updatePinBarLayout(bar: HTMLElement): void {
+  const list = bar.querySelector<HTMLElement>(`#${PIN_BAR_LIST_ID}`);
+  const countEl = bar.querySelector<HTMLElement>(`#${PIN_BAR_COUNT_ID}`);
+  if (!list) return;
 
   const items = Array.from(list.querySelectorAll<HTMLElement>('.bili-pin-bar__item'));
   const total = items.length;
   if (countEl) countEl.textContent = String(total);
-
-  // 判断是否有第二行：用 offsetTop 判断，比高度更直观
-  let hiddenCount = 0;
-  if (items.length > 0) {
-    const firstTop = Math.min(...items.map((el) => el.offsetTop));
-    hiddenCount = items.filter((el) => el.offsetTop > firstTop + 1).length;
-  }
-
-  const needsToggle = hiddenCount > 0;
-  toggle.style.display = needsToggle ? '' : 'none';
-
-  // 文案
-  if (needsToggle) {
-    toggle.textContent = expanded ? '收起' : `展开(还有${hiddenCount}个)`;
-  } else {
-    // 不需要展开：强制为收起状态，避免占位
-    bar.dataset.expanded = '0';
-    list.classList.remove('is-expanded');
-    list.classList.add('is-collapsed');
-    // 顺带把状态记为收起，避免下次加载时仍是展开
-    storageSetBool(PIN_BAR_EXPANDED_KEY, false).catch(() => {});
-  }
 }
 
 /**
@@ -348,5 +465,5 @@ export function renderPinBar(
   // 更新高亮状态
   updateActiveHighlight();
 
-  requestAnimationFrame(() => updatePinBarCollapse(bar));
+  requestAnimationFrame(() => updatePinBarLayout(bar));
 }
