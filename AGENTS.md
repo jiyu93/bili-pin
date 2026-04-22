@@ -25,27 +25,21 @@
 
 ## 2. 必守规范（违反会导致严重缺陷）
 
-### 2.1 内存泄漏防护（历史 OOM 崩溃主因）
-B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑。**所有全局监听器和 Observer 必须使用单例模式保护。**
-
-- **单例检查**：在注册 `window.addEventListener` 或 `MutationObserver` 前，必须检查 DOM 标记，例如：
-  ```ts
-  if (document.body.getAttribute('data-bili-pin-xxx-installed')) return;
-  document.body.setAttribute('data-bili-pin-xxx-installed', 'true');
-  ```
-- **MutationObserver 防递归**：
-  1. 修改 DOM 前先检查值是否真正改变（如对比 `textContent`）。
-  2. 在 Observer 回调中过滤掉由插件自身元素（带 `data-bili-pin-*` 属性）引起的变动。
+### 2.1 开发义务
+- 确保相关功能的做法是直接的、可靠的、符合第一性原理的、没有过度设计的、没有无意义的性能开销的.
+- 在多次迭代过程中,可能存在不断在补丁上加补丁的历史情况发生,如果发生了,需要主动积极地在严格保证原功能逻辑不变的情况下,优化/清理/乃至重新设计和重构代码,目的就是为了贴近上述的直接,可靠,第一性原理.
 
 ### 2.2 文档维护义务
 - **每次完成一个"可验收"的改动后，必须回来更新 `AGENTS.md`**。
 - 写清改动点、涉及文件、如何验证，并删除过时描述。
 
 ### 2.3 版本号规范
-- 功能变更增加第二位数字（如 `v1.1.0`）。
-- 只修 Bug 无功能变更增加第三位数字（如 `v1.0.2`）。
+- 大功能变更增加第二位数字（如 `v1.1.0`）。
+- 小功能变更和Bug修复,增加第三位数字（如 `v1.0.2`）。
 - 同一批功能上线后的补完、修正、回归验证与 UI 收敛，默认继续增加第三位数字；不要因为还在打磨同一批功能就再次提升第二位数字。
-- 修改版本号后同步更新 `package.json` 和本文档 **第 6 章**。
+- 若同一批改动尚未实际发版，中途为修复本次改动引入的回归或实现缺陷而继续返工，**不要再次增加版本号**；应保留同一个目标版本，并把文档记录合并为最终结果。
+- 项目版本号的**单一真源**是 `package.json`；`wxt.config.ts` 中的 manifest 版本必须直接读取这里，禁止再次手写一个独立版本号。
+- 修改版本号后同步更新 `package.json` 和本文档 **第 6 章**，并确认 `npm run build` 后 `.output/chrome-mv3/manifest.json` 的 `version` 与 `package.json` 一致。
 
 ---
 
@@ -82,7 +76,7 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 
 | 功能 | 入口文件 | 核心逻辑文件 | 备注 |
 |------|---------|-------------|------|
-| **动态页置顶栏 & Feed 切换** | `entrypoints/content.ts` | `src/ui/pinBar.ts` (渲染/高度持久化), `src/bili/feedSwitch.ts` (切换逻辑) | 使用 `sortablejs` 实现拖拽排序，置顶栏支持纵向拉伸和滚动。 |
+| **动态页置顶栏 & Feed 切换** | `entrypoints/content.ts` | `src/ui/pinBar.ts` (渲染/高度持久化), `src/bili/feedSwitch.ts` (切换逻辑) | 使用 `sortablejs` 实现拖拽排序，置顶栏支持纵向拉伸和滚动；高度持久化以拖拽结束时写入 storage 为主路径，不依赖通用 `ResizeObserver` 回写。 |
 | **动态页推荐栏图钉按钮** | - | `src/ui/injectPinButtons.ts` | 在头像容器右上角插入图钉按钮。 |
 | **动态卡片菜单置顶选项** | - | `src/ui/dynamicMoreMenuPin.ts` | **克隆**原生"三点菜单"项插入。 |
 | **空间页/视频页菜单置顶** | `entrypoints/space.content.ts`, `video.content.ts` | 各自入口文件内实现 | 监听"已关注"按钮 hover 弹层 (`.vui_popover` / `.van-popover`)，**克隆**原生菜单项插入。难点：通过 `mouseover` 追踪和 API 缓存识别当前 hover 的是哪个 UP。 |
@@ -109,9 +103,10 @@ B 站是 SPA，Content Script 可能在页面切换时重复执行注入逻辑�
 
 ## 6. 当前状态与近期变更
 
-**当前版本：`v1.1.2`**
+**当前版本：`v1.1.3`**
 
 ### 已完成（最近在上面的变更）
+- `v1.1.3`：修复动态页置顶栏高度相关的一整批未发版问题，并将该批返工统一收敛到同一个目标版本，而不再额外占用 `v1.1.4+`。本次最终实现同时解决了两个用户可见缺陷：一是刷新后高度会逐次变高，原因是持久化逻辑曾误把 `.bili-pin-bar__list` 的渲染总高度（包含 padding）当成 CSS `height` 写回；二是手动调整后的高度在刷新后会退回默认两行，原因是中途返工时把“当前显示高度”和“已持久化高度”混在了一起，导致保存链路被自己短路。现已按更直接的方案收敛：初始化时读取并应用已保存高度；拖拽结束 (`pointerup/pointercancel`) 时把最终高度串行写入 storage；不再依赖 `ResizeObserver`、防抖定时器或多份 DOM dataset 影子状态回写，减少竞态与无意义的持续开销。同时把扩展 manifest 版本号改为直接读取 `package.json`，让版本只维护一处。涉及文件：`src/ui/pinBar.ts`、`package.json`、`wxt.config.ts`。验证：`npm run typecheck`、`npm run build` 通过；页面上不拖拽时连续刷新高度应保持不变，手动拖拽后无论立即刷新还是多次快速调整后刷新，都应恢复到最后一次释放手柄时的高度；`.output/chrome-mv3/manifest.json` 的 `version` 应与 `package.json` 一致为 `1.1.3`。
 - `v1.1.2`：将动态页置顶栏从单一“展开/收起”切换为可自由纵向拉伸的滚动容器；置顶头像过多时可通过底部正中央的拖拽手柄调整高度，并通过纵向滚动条浏览完整列表；新增置顶栏高度的 `sync/local` 镜像存储与时间戳状态，已打开页面刷新后仍保留上次拉伸结果，同时兼容旧版展开状态作为一次性迁移回退；移除头部“恢复默认高度”按钮，改为更克制的底部拖拽交互。涉及文件：`src/ui/pinBar.ts`、`src/styles/content.css`、`src/storage/keys.ts`、`package.json`、`wxt.config.ts`。验证：`npm run typecheck` 通过，页面上需重点确认底部手柄拖拽、高度持久化、滚动浏览，以及点击头像切换 Feed/拖拽排序未回归；`npm run build` 后产物 manifest 版本应为 `1.1.2`。
 - `v1.1.1`：补完配置同步闭环；修复跨设备同步分叉问题，将 `chrome.storage.sync` 明确为权威配置，`chrome.storage.local` 仅作为镜像与回退副本，避免两台设备持续各自坚持本地状态；置顶列表保留带时间戳的同步状态与删除墓碑，置顶栏展开状态也改为按更新时间收敛；通过 `storage.onChanged` 将远端 `sync` 变化主动回灌给已打开页面；支持从 `config/manifest-key.txt` 读取固定 `manifest.key`，便于两台电脑本地调试时保持相同扩展 ID；扩展图标弹窗收敛为头像数量和最后同步时间，并修复 MV3 下内联脚本不执行导致的空白问题，同时优化为更紧凑的卡片式样式；补做收尾清理，收紧生产环境调试桥与控制台诊断输出、抽出统一 storage key 常量，并补上 `npm run typecheck`。
 - `v1.1.0`：新增配置同步能力；置顶列表与置顶栏展开状态改为 `chrome.storage.sync` / `chrome.storage.local` 双写；首次升级会把既有本地配置迁移到同步存储，避免更新后配置被空同步数据覆盖。

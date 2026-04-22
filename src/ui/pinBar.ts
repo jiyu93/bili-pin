@@ -29,6 +29,12 @@ type NumberState = {
   updatedAt: number;
 };
 
+type PinBarListWithPersistState = HTMLElement & {
+  __biliPinPersistedHeight?: number;
+  __biliPinPendingHeight?: number;
+  __biliPinSavingHeight?: boolean;
+};
+
 export type PinBarHandlers = {
   onClickMid?: (mid: string) => void;
   onUnpinMid?: (mid: string) => void;
@@ -161,7 +167,66 @@ async function storageSetPinBarHeight(value: number): Promise<void> {
 function applyPinBarHeight(list: HTMLElement, height: number): void {
   const normalized = normalizePinBarHeight(height);
   list.style.height = `${normalized}px`;
-  list.dataset.persistedHeight = String(normalized);
+}
+
+function setPersistedPinBarHeight(list: HTMLElement, height: number): void {
+  const normalized = normalizePinBarHeight(height);
+  (list as PinBarListWithPersistState).__biliPinPersistedHeight = normalized;
+}
+
+function getPersistedPinBarHeight(list: HTMLElement): number | null {
+  const persisted = (list as PinBarListWithPersistState).__biliPinPersistedHeight;
+  if (typeof persisted !== 'number' || !Number.isFinite(persisted)) return null;
+  return normalizePinBarHeight(persisted);
+}
+
+function getAppliedPinBarHeight(list: HTMLElement): number {
+  const inlineHeight = Number.parseFloat(list.style.height || '');
+  if (Number.isFinite(inlineHeight)) {
+    return normalizePinBarHeight(inlineHeight);
+  }
+
+  const computedHeight = Number.parseFloat(globalThis.getComputedStyle(list).height || '');
+  if (Number.isFinite(computedHeight)) {
+    return normalizePinBarHeight(computedHeight);
+  }
+
+  return normalizePinBarHeight(list.clientHeight);
+}
+
+function queuePinBarHeightPersist(list: HTMLElement, height: number): void {
+  const state = list as PinBarListWithPersistState;
+  const normalized = normalizePinBarHeight(height);
+  const persistedHeight = getPersistedPinBarHeight(list);
+  if (normalized === persistedHeight && state.__biliPinPendingHeight == null && !state.__biliPinSavingHeight) {
+    return;
+  }
+
+  state.__biliPinPendingHeight = normalized;
+  if (state.__biliPinSavingHeight) return;
+
+  state.__biliPinSavingHeight = true;
+
+  const flushNext = () => {
+    const nextHeight = state.__biliPinPendingHeight;
+    if (typeof nextHeight !== 'number' || !Number.isFinite(nextHeight)) {
+      state.__biliPinSavingHeight = false;
+      return;
+    }
+
+    state.__biliPinPendingHeight = undefined;
+
+    void storageSetPinBarHeight(nextHeight)
+      .then(() => {
+        setPersistedPinBarHeight(list, nextHeight);
+      })
+      .catch(() => {})
+      .finally(() => {
+        flushNext();
+      });
+  };
+
+  flushNext();
 }
 
 export async function ensurePinBarPrefs(bar: HTMLElement): Promise<void> {
@@ -172,7 +237,7 @@ export async function ensurePinBarPrefs(bar: HTMLElement): Promise<void> {
 
   const height = await storageGetPinBarHeight();
   applyPinBarHeight(list, height);
-  list.dataset.resizeReady = '1';
+  setPersistedPinBarHeight(list, height);
   updatePinBarLayout(bar);
 }
 
@@ -218,7 +283,6 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
   bar.appendChild(header);
   bar.appendChild(list);
   bar.appendChild(resize);
-  ensurePinBarResizePersistence(bar, list);
   ensurePinBarResizeHandle(bar, list, resize);
 
   // 插到“关注UP推荐列表”上方
@@ -232,30 +296,6 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
     stripRoot.insertAdjacentElement('beforebegin', bar);
   }
   return bar;
-}
-
-function ensurePinBarResizePersistence(bar: HTMLElement, list: HTMLElement): void {
-  if (list.dataset.resizeObserverInstalled === '1') return;
-  list.dataset.resizeObserverInstalled = '1';
-
-  let saveTimer = 0;
-  const observer = new ResizeObserver(() => {
-    if (list.dataset.resizeReady !== '1') return;
-    const nextHeight = normalizePinBarHeight(list.getBoundingClientRect().height);
-    const prevHeight = Number(list.dataset.persistedHeight || '0');
-    if (nextHeight === prevHeight) return;
-
-    list.dataset.persistedHeight = String(nextHeight);
-    if (saveTimer) {
-      window.clearTimeout(saveTimer);
-    }
-    saveTimer = window.setTimeout(() => {
-      storageSetPinBarHeight(nextHeight).catch(() => {});
-      updatePinBarLayout(bar);
-    }, 120);
-  });
-
-  observer.observe(list);
 }
 
 function ensurePinBarResizeHandle(bar: HTMLElement, list: HTMLElement, handle: HTMLButtonElement): void {
@@ -280,11 +320,16 @@ function ensurePinBarResizeHandle(bar: HTMLElement, list: HTMLElement, handle: H
     event.preventDefault();
     const nextHeight = normalizePinBarHeight(startHeight + (event.clientY - startY));
     applyPinBarHeight(list, nextHeight);
-    updatePinBarLayout(bar);
   };
 
   const onPointerUp = () => {
+    const finalHeight = getAppliedPinBarHeight(list);
+    const persistedHeight = getPersistedPinBarHeight(list);
     finishDrag();
+    if (finalHeight === persistedHeight) {
+      return;
+    }
+    queuePinBarHeightPersist(list, finalHeight);
   };
 
   handle.addEventListener('pointerdown', (event) => {
@@ -292,7 +337,7 @@ function ensurePinBarResizeHandle(bar: HTMLElement, list: HTMLElement, handle: H
     event.stopPropagation();
     dragging = true;
     startY = event.clientY;
-    startHeight = list.getBoundingClientRect().height;
+    startHeight = getAppliedPinBarHeight(list);
     bar.dataset.resizing = '1';
     window.addEventListener('pointermove', onPointerMove, true);
     window.addEventListener('pointerup', onPointerUp, true);
