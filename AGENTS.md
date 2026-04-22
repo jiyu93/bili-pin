@@ -46,8 +46,10 @@
 ## 3. 核心架构
 
 ### 3.1 运行环境隔离 (Content Script Worlds)
-- **`MAIN` World**：动态页 (`t.bilibili.com`)、空间页 (`space.bilibili.com`)、视频页 (`video.content.ts`)。
-  - 用途：拦截/修改 XHR/Fetch（`apiInterceptor`）、访问 `window.__INITIAL_STATE__`、操作原生 DOM。
+- **`MAIN` World**：
+  - 动态页 (`entrypoints/content.ts`)：尽早初始化 `apiInterceptor`，渲染置顶栏、推荐横条图钉按钮、动态卡片菜单置顶项。
+  - 空间页 (`entrypoints/space.content.ts`)：初始化 `apiInterceptor`，为关注时间与“已关注”悬停菜单提供 relation 接口缓存。
+  - 视频页 (`entrypoints/video.content.ts`)：不拦截 API；直接访问 `window.__INITIAL_STATE__` 与原生 DOM，为“已关注”悬停菜单注入置顶项。
 - **`ISOLATED` World**：`entrypoints/storageBridge.content.ts`。
   - 用途：为 `MAIN` world 提供 `chrome.storage.local/sync` 代理服务（通过 `window.postMessage` 转发）。
   - 原因：`MAIN` world 无法直接访问 `chrome.storage`。
@@ -60,10 +62,10 @@
 - 响应式机制：修改数据后广播 `onPinsChange` 事件，所有 UI 组件监听并自动重绘。
 
 ### 3.3 API 拦截 (`src/bili/apiInterceptor.ts`)
-- **拦截范围**：仅限 `portal`、`uplist`、`feed`、`relation` 等我们真正依赖的 B 站接口。
+- **拦截范围**：仅限 `portal`、`uplist`、`feed`、`relation/followings`、`relation/fans`、`relation/tag` 等我们真正依赖的 B 站接口。
 - **用途**：
-  - 拦截 `portal` / `uplist` / `feed`：缓存 UP 主头像/昵称，避免依赖不稳定 DOM 解析。
-  - 拦截 `followings`：获取 `mid` -> `mtime` 关注时间映射。
+  - 拦截 `portal` / `uplist` / `feed`：缓存 `mid -> { name, face, has_update }`，避免依赖不稳定 DOM 解析。
+  - 拦截 `relation/*`：缓存列表用户信息，并提取 `mid -> mtime` 关注时间映射供空间页使用。
 - **Feed 切换黑魔法**：当点击置顶 UP 且该 UP 不在原生推荐栏时，拦截"全部动态"请求，强行替换 `host_mid` 参数，欺骗 B 站前端渲染目标 UP 的 Feed。
 
 ### 3.4 样式注入
@@ -76,19 +78,19 @@
 
 | 功能 | 入口文件 | 核心逻辑文件 | 备注 |
 |------|---------|-------------|------|
-| **动态页置顶栏 & Feed 切换** | `entrypoints/content.ts` | `src/ui/pinBar.ts` (渲染/高度持久化), `src/bili/feedSwitch.ts` (切换逻辑) | 使用 `sortablejs` 实现拖拽排序，置顶栏支持纵向拉伸和滚动；高度持久化以拖拽结束时写入 storage 为主路径，不依赖通用 `ResizeObserver` 回写。 |
+| **动态页置顶栏 & Feed 切换** | `entrypoints/content.ts` | `src/ui/injectPinButtons.ts` (推荐栏按钮 + 置顶栏编排), `src/ui/pinBar.ts` (渲染/高度持久化), `src/bili/feedSwitch.ts` (切换逻辑) | 使用 `sortablejs` 实现拖拽排序，置顶栏支持纵向拉伸和滚动；高度持久化以拖拽结束时写入 storage 为主路径，不依赖通用 `ResizeObserver` 回写。 |
 | **动态页推荐栏图钉按钮** | - | `src/ui/injectPinButtons.ts` | 在头像容器右上角插入图钉按钮。 |
 | **动态卡片菜单置顶选项** | - | `src/ui/dynamicMoreMenuPin.ts` | **克隆**原生"三点菜单"项插入。 |
-| **空间页/视频页菜单置顶** | `entrypoints/space.content.ts`, `video.content.ts` | 各自入口文件内实现 | 监听"已关注"按钮 hover 弹层 (`.vui_popover` / `.van-popover`)，**克隆**原生菜单项插入。难点：通过 `mouseover` 追踪和 API 缓存识别当前 hover 的是哪个 UP。 |
+| **空间页/视频页菜单置顶** | `entrypoints/space.content.ts`, `entrypoints/video.content.ts` | `src/ui/spaceFollowMenuPin.ts`, `src/ui/videoFollowMenuPin.ts` | 监听"已关注"按钮 hover 弹层 (`.vui_popover` / `.van-popover`)，**克隆**原生菜单项插入。空间页通过 `mouseover` 追踪最近 hover 的列表项 mid；视频页优先读取 `window.__INITIAL_STATE__`，DOM 作为兜底。 |
 | **关注时间显示** | - | `src/ui/followTime.ts` | 依赖 `apiInterceptor` 缓存的 `mid -> mtime` 映射，在 DOM 中插入格式化时间文本。 |
-| **数据同步/状态管理** | `entrypoints/storageBridge.content.ts` | `src/storage/config.ts`, `src/storage/pins.ts` | `sync` 为主、本地缓存回退；监听 `storage.onChanged` 后将远端变化回灌到页面。 |
+| **数据同步/状态管理** | `entrypoints/storageBridge.content.ts` | `src/storage/config.ts`, `src/storage/pins.ts`, `src/utils/bridgeClient.ts` | `sync` 为主、本地缓存回退；监听 `storage.onChanged` 后将远端变化回灌到页面。 |
 | **扩展图标同步摘要弹窗** | `public/popup.html` | `public/popup.html`, `public/popup.js` | 点击扩展图标可查看头像数量与最后同步时间；UI 保持紧凑，默认打开即刷新。 |
 
 ---
 
 ## 5. 调试与验证
 
-- **调试工具**：先在 DevTools 执行 `localStorage.setItem('biliPin.debug','1')` 并刷新页面，再在控制台输入 `window.__biliPin.dump()` 查看诊断信息；调试结束后执行 `localStorage.removeItem('biliPin.debug')`。
+- **调试工具**：先在 DevTools 执行 `localStorage.setItem('biliPin.debug','1')` 并刷新页面，再在控制台输入 `window.__biliPin.dump()` 查看选择器诊断信息，或输入 `window.__biliPin.cache()` 查看缓存与置顶数据摘要；调试结束后执行 `localStorage.removeItem('biliPin.debug')`。
 - **同步摘要弹窗**：点击扩展工具栏图标，可查看头像数量与最后同步时间，用于快速确认跨设备同步是否收敛。
 - **验收清单**（每次改动后按场景自测）：
   - [ ] 动态页置顶栏显示正常，且能拖拽排序。
@@ -105,6 +107,10 @@
 
 **当前版本：`v1.1.3`**
 
+### 文档同步（不改版本号）
+- `2026-04-23`：全量核对仓库内 `*.md` 文档与当前代码实现，修正了 `README.md`、`docs/roadmap.md`、`docs/prd.md`、`AGENTS.md` 中关于置顶栏交互、存储方案、模块拆分和运行环境的过时描述；本次仅同步文档，不变更运行时代码与版本号。
+- `2026-04-23`：按当前实现重写 `docs/prd.md`，不再保留旧版本功能文案与历史补注，仅保留简介与背景，并改为面向维护者说明“当前功能模块、页面入口、核心模块、数据同步与实现方式”；同步将本章对 `docs/prd.md` 的定位从“历史需求档案”更新为“项目简介、背景与当前结构说明”。
+
 ### 已完成（最近在上面的变更）
 - `v1.1.3`：修复动态页置顶栏高度相关的一整批未发版问题，并将该批返工统一收敛到同一个目标版本，而不再额外占用 `v1.1.4+`。本次最终实现同时解决了两个用户可见缺陷：一是刷新后高度会逐次变高，原因是持久化逻辑曾误把 `.bili-pin-bar__list` 的渲染总高度（包含 padding）当成 CSS `height` 写回；二是手动调整后的高度在刷新后会退回默认两行，原因是中途返工时把“当前显示高度”和“已持久化高度”混在了一起，导致保存链路被自己短路。现已按更直接的方案收敛：初始化时读取并应用已保存高度；拖拽结束 (`pointerup/pointercancel`) 时把最终高度串行写入 storage；不再依赖 `ResizeObserver`、防抖定时器或多份 DOM dataset 影子状态回写，减少竞态与无意义的持续开销。同时把扩展 manifest 版本号改为直接读取 `package.json`，让版本只维护一处。涉及文件：`src/ui/pinBar.ts`、`package.json`、`wxt.config.ts`。验证：`npm run typecheck`、`npm run build` 通过；页面上不拖拽时连续刷新高度应保持不变，手动拖拽后无论立即刷新还是多次快速调整后刷新，都应恢复到最后一次释放手柄时的高度；`.output/chrome-mv3/manifest.json` 的 `version` 应与 `package.json` 一致为 `1.1.3`。
 - `v1.1.2`：将动态页置顶栏从单一“展开/收起”切换为可自由纵向拉伸的滚动容器；置顶头像过多时可通过底部正中央的拖拽手柄调整高度，并通过纵向滚动条浏览完整列表；新增置顶栏高度的 `sync/local` 镜像存储与时间戳状态，已打开页面刷新后仍保留上次拉伸结果，同时兼容旧版展开状态作为一次性迁移回退；移除头部“恢复默认高度”按钮，改为更克制的底部拖拽交互。涉及文件：`src/ui/pinBar.ts`、`src/styles/content.css`、`src/storage/keys.ts`、`package.json`、`wxt.config.ts`。验证：`npm run typecheck` 通过，页面上需重点确认底部手柄拖拽、高度持久化、滚动浏览，以及点击头像切换 Feed/拖拽排序未回归；`npm run build` 后产物 manifest 版本应为 `1.1.2`。
@@ -119,8 +125,8 @@
 ### 下一步规划
 详见 `docs/roadmap.md`（未来新功能或优化方向会记录在此，启动新功能前建议对照）。
 
-### 历史需求档案
-详见 `docs/prd.md`（产品设计初衷与详细功能定义）。
+### 项目说明
+详见 `docs/prd.md`（项目简介、背景与当前结构说明）。
 
 ---
 
@@ -128,9 +134,9 @@
 
 ```
 entrypoints/
-  content.ts          # 动态页 (MAIN world)
-  space.content.ts    # 空间页 (MAIN world)
-  video.content.ts    # 视频页 (MAIN world)
+  content.ts          # 动态页 (MAIN world, API 拦截 + UI 注入)
+  space.content.ts    # 空间页 (MAIN world, relation 缓存 + 关注时间/菜单)
+  video.content.ts    # 视频页 (MAIN world, 读取 __INITIAL_STATE__ + 菜单注入)
   storageBridge.content.ts  # Storage Bridge (ISOLATED world)
 public/
   popup.html          # 扩展图标同步摘要弹窗
@@ -139,16 +145,21 @@ config/
   manifest-key.txt    # 固定扩展 ID 用的 manifest 公钥
 src/
   bili/
-    apiInterceptor.ts # API 拦截与缓存
-    feedSwitch.ts     # Feed 切换逻辑
+    apiInterceptor.ts # portal/uplist/feed/relation API 拦截与缓存
+    clickBridge.ts    # 动态页内触发 Feed 切换
+    feedSwitch.ts     # 推荐栏/全部动态切换逻辑
   storage/
     config.ts         # sync/local 镜像存储与迁移
     pins.ts           # 置顶数据管理与响应式同步
   styles/
     content.css       # 插件样式
+  utils/
+    bridgeClient.ts   # MAIN world 访问 storage bridge 的客户端
   ui/
     pinBar.ts             # 置顶栏渲染
     injectPinButtons.ts   # 推荐栏图钉按钮
     dynamicMoreMenuPin.ts # 动态卡片菜单注入
+    spaceFollowMenuPin.ts # 空间页“已关注”菜单注入
+    videoFollowMenuPin.ts # 视频页“已关注”菜单注入
     followTime.ts         # 关注时间显示
 ```
