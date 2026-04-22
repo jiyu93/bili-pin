@@ -18,7 +18,7 @@ export default defineContentScript({
     // 尽早初始化API拦截器，在页面加载API请求之前
     initApiInterceptor();
     installDebugBridge();
-    // 动态流卡片右上角“三点菜单”里注入“置顶动态/取消置顶”
+    // 动态流卡片右上角“三点菜单”里注入“置顶UP主/取消置顶”
     observeDynamicFeedMoreMenu();
 
     observeUpAvatarStrip((stripRoot) => {
@@ -28,5 +28,3 @@ export default defineContentScript({
     });
   },
 });
-
-

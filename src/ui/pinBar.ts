@@ -192,7 +192,7 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
 
   const titleText = document.createElement('span');
   titleText.className = 'bili-pin-bar__titleText';
-  titleText.textContent = '置顶动态';
+  titleText.textContent = '置顶UP主';
 
   const count = document.createElement('span');
   count.id = PIN_BAR_COUNT_ID;

@@ -67,7 +67,7 @@ function findOptionItems(options: HTMLElement): HTMLElement[] {
 async function updateMenuItemText(item: HTMLElement, mid: string): Promise<void> {
   const pinned = await isPinned(mid);
   const label = item.querySelector<HTMLElement>(OPTION_LABEL_SELECTOR) ?? item;
-  label.textContent = pinned ? '取消置顶' : '置顶动态';
+  label.textContent = pinned ? '取消置顶' : '置顶UP主';
 }
 
 function isVisible(el: HTMLElement): boolean {
@@ -160,7 +160,7 @@ function ensureMenuItemInOptions(
         showToast('已取消置顶');
       } else {
         await pinUp({ mid, name: meta.name, face: meta.face });
-        showToast('已置顶动态');
+        showToast('已置顶UP主');
       }
     } catch (err: any) {
       showToast(err?.message || '操作失败，请重试');
@@ -282,5 +282,4 @@ export function observeDynamicFeedMoreMenu(): void {
 
   window.addEventListener('popstate', findAndAttach);
 }
-
 
