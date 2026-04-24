@@ -13,6 +13,7 @@ const OPTION_ITEM_SELECTOR = '.bili-cascader-options__item';
 const OPTION_LABEL_SELECTOR = '.bili-cascader-options__item-label';
 
 const MENU_ITEM_MARK = 'data-bili-pin-dyn-more-menu-item';
+const RETRY_TIMER_ATTR = 'data-bili-pin-more-retry-timer';
 
 function extractMidFromHref(href: string): string | null {
   const m = String(href || '').match(/space\.bilibili\.com\/(\d+)/);
@@ -211,12 +212,20 @@ function scheduleEnsureMenuItem(dynItem: HTMLElement): void {
   const delays = [0, 40, 80, 140, 220, 340, 520, 800, 1200, 1600];
   const run = (idx: number) => {
     if (dynItem.getAttribute('data-bili-pin-more-token') !== token) return;
+    const storedTimer = dynItem.getAttribute(RETRY_TIMER_ATTR);
+    if (storedTimer) dynItem.removeAttribute(RETRY_TIMER_ATTR);
     const ok = ensureMenuItemForDynItem(dynItem);
     if (ok) return;
     if (idx >= delays.length - 1) return;
-    window.setTimeout(() => run(idx + 1), delays[idx + 1]);
+    const timer = window.setTimeout(() => run(idx + 1), delays[idx + 1]);
+    dynItem.setAttribute(RETRY_TIMER_ATTR, String(timer));
   };
 
+  const prevTimer = Number(dynItem.getAttribute(RETRY_TIMER_ATTR) || '0');
+  if (prevTimer > 0) {
+    window.clearTimeout(prevTimer);
+    dynItem.removeAttribute(RETRY_TIMER_ATTR);
+  }
   run(0);
 }
 
@@ -273,13 +282,22 @@ export function observeDynamicFeedMoreMenu(): void {
     if (el) attach(el);
   };
 
+  let attachScheduled = false;
+  const scheduleFindAndAttach = () => {
+    if (attachScheduled) return;
+    attachScheduled = true;
+    requestAnimationFrame(() => {
+      attachScheduled = false;
+      findAndAttach();
+    });
+  };
+
   // 初次尝试（可能 DOM 尚未就绪）
   findAndAttach();
 
-  // SPA/异步渲染：仅在 documentElement 上观察 childList（subtree=true 会更重，这里只做一次 attach 检测）
-  const mo = new MutationObserver(() => findAndAttach());
+  // SPA/异步渲染：仅在 documentElement 上观察 childList，并把重复 mutation 合并到同一帧
+  const mo = new MutationObserver(scheduleFindAndAttach);
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
   window.addEventListener('popstate', findAndAttach);
 }
-

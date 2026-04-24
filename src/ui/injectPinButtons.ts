@@ -235,21 +235,6 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
     });
 
     host.appendChild(btn);
-
-    // 如果暂时没有 mid，延迟重试获取
-    if (!mid) {
-      setTimeout(() => {
-        const retryMid = getItemMid(item);
-        if (retryMid && /^\d+$/.test(retryMid)) {
-          btn.dataset.mid = retryMid;
-          btn.disabled = false;
-          btn.style.opacity = '';
-          btn.title = '';
-          btn.removeAttribute('data-retry');
-          setBtnState(btn, pinnedSet.has(retryMid));
-        }
-      }, 1000); // 1秒后重试
-    }
   }
 }
 
@@ -419,6 +404,7 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
 
 let activeObserver: MutationObserver | null = null;
 let activeStripRoot: HTMLElement | null = null;
+let refreshQueued = false;
 
 // 初始化全局单例监听（只运行一次）
 function initGlobalListenersOnce() {
@@ -470,8 +456,13 @@ export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
         }
       }
       if (shouldRefresh) {
-        // 使用闭包捕获当前的 stripRoot 是安全的，因为 activeObserver 会在切换时被 disconnect
-        refreshPinUi(stripRoot).catch(() => {});
+        if (refreshQueued) return;
+        refreshQueued = true;
+        requestAnimationFrame(() => {
+          refreshQueued = false;
+          // 使用闭包捕获当前的 stripRoot 是安全的，因为 activeObserver 会在切换时被 disconnect
+          refreshPinUi(stripRoot).catch(() => {});
+        });
       }
     });
     // B站动态加载是追加 .bili-dyn-up-list__item，通常在 stripRoot 的子孙节点中

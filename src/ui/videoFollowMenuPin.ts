@@ -7,6 +7,9 @@ const FOLLOW_DROPDOWN_SELECTOR = 'ul.follow_dropdown';
 const FOLLOW_ITEM_SELECTOR = 'ul.follow_dropdown > li';
 
 const MENU_ITEM_MARK = 'data-bili-pin-video-menu-item';
+const POPOVER_HOOK_MARK = 'data-bili-pin-video-popover-hooked';
+
+const popoverObservers = new WeakMap<HTMLElement, MutationObserver>();
 
 function getOwnerFromInitialState(): { mid?: string; name?: string; face?: string } {
   // 注意：在 MAIN world 中可以直接访问 window.__INITIAL_STATE__
@@ -148,24 +151,21 @@ function ensureMenuItemInFollowDropdown(ul: HTMLElement): void {
 }
 
 function hookPopover(popover: HTMLElement): void {
-  if (popover.getAttribute('data-bili-pin-hooked') === '1') return;
-  popover.setAttribute('data-bili-pin-hooked', '1');
+  if (popover.getAttribute(POPOVER_HOOK_MARK) === '1') return;
+  popover.setAttribute(POPOVER_HOOK_MARK, '1');
 
   const tryInject = () => {
     // video 页已关注菜单结构：div.van-popover.van-followed > ul.follow_dropdown > li
     const ul = popover.querySelector<HTMLElement>(FOLLOW_DROPDOWN_SELECTOR);
     if (ul && isLikelyFollowMenu(ul)) {
       ensureMenuItemInFollowDropdown(ul);
-      return;
     }
   };
 
   // 先尝试一次（有些页面 popover 初始就已生成）
   tryInject();
 
-  // 监听“显示/隐藏”和内容生成：只观察这个 popover，自身开销很低
   const mo = new MutationObserver((mutations) => {
-    // 防递归：忽略由插件自身 DOM 操作触发的变动
     const isSelf = mutations.every((m) => {
       const target = m.target instanceof Element ? m.target : m.target.parentElement;
       return target?.closest(`[${MENU_ITEM_MARK}="1"]`);
@@ -175,6 +175,13 @@ function hookPopover(popover: HTMLElement): void {
     tryInject();
   });
   mo.observe(popover, { attributes: true, childList: true, subtree: true });
+  popoverObservers.set(popover, mo);
+}
+
+function cleanupPopover(popover: HTMLElement): void {
+  popoverObservers.get(popover)?.disconnect();
+  popoverObservers.delete(popover);
+  popover.removeAttribute(POPOVER_HOOK_MARK);
 }
 
 function scanAndHook(): void {
@@ -210,9 +217,14 @@ export function observeVideoFollowMenu(): void {
         const p = (n as Element).querySelector?.(POPOVER_SELECTOR);
         if (p) hookPopover(p as HTMLElement);
       }
+
+      for (const n of Array.from(m.removedNodes)) {
+        if (!(n instanceof Element)) continue;
+        if (n.matches?.(POPOVER_SELECTOR)) cleanupPopover(n as HTMLElement);
+        n.querySelectorAll?.(POPOVER_SELECTOR).forEach((el) => cleanupPopover(el as HTMLElement));
+      }
     }
   });
   observer.observe(document.body, { childList: true, subtree: false });
 }
-
 

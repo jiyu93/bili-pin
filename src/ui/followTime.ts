@@ -1,6 +1,11 @@
 import { getFollowMtimeByMid } from '../bili/apiInterceptor';
 
 const PROCESSED_ATTR = 'data-bili-pin-mtime-injected';
+const TIME_MARK_ATTR = 'data-bili-pin-time-injected';
+
+let rootObserver: MutationObserver | null = null;
+let listObserver: MutationObserver | null = null;
+let observedListRoot: HTMLElement | null = null;
 
 function formatTime(timestamp: number): string {
   if (!timestamp) return '';
@@ -14,20 +19,30 @@ function formatTime(timestamp: number): string {
   return `${Y}-${M}-${D} ${h}:${m}:${s}`;
 }
 
+function findRelationListRoot(): HTMLElement | null {
+  const firstCard = document.querySelector<HTMLElement>('.relation-card');
+  if (!firstCard) return null;
+
+  return (
+    firstCard.closest<HTMLElement>('[class*="relation-list"]') ||
+    firstCard.closest<HTMLElement>('[class*="list"]') ||
+    firstCard.parentElement
+  );
+}
+
 export function observeFollowTime(): void {
   const root = document.documentElement;
   if (!root || root.getAttribute('data-bili-pin-follow-time-installed') === '1') return;
   root.setAttribute('data-bili-pin-follow-time-installed', '1');
 
-  const check = () => {
-    // 适配新的 DOM 结构：.relation-card
-    // 注意：.relation-card 可能是 li 的子元素，也可能是直接的列表项
-    const cards = document.querySelectorAll('.relation-card');
-    
-    cards.forEach((card) => {
-      if (card.getAttribute(PROCESSED_ATTR)) return;
+  let scheduled = false;
 
-      // 1. 找 mid
+  const check = () => {
+    const cards = document.querySelectorAll<HTMLElement>('.relation-card');
+
+    cards.forEach((card) => {
+      if (card.getAttribute(PROCESSED_ATTR) === '1') return;
+
       const link = card.querySelector<HTMLAnchorElement>('a[href*="//space.bilibili.com/"]');
       if (!link) return;
 
@@ -36,76 +51,83 @@ export function observeFollowTime(): void {
       if (!mid) return;
 
       const mtime = getFollowMtimeByMid(mid);
-      if (mtime) {
-        // 2. 找插入位置
-        // 优先适配 .relation-card-info 结构
-        let container: Element | null = card.querySelector('.relation-card-info');
-        let refNode: Node | null = null;
-        
-        // 如果找到了 info 容器
-        if (container) {
-            // 尝试找操作区（已关注按钮等）
-            // 类名可能是 relation-card-info-option 或 relation-card-info__option
-            const option = container.querySelector('[class*="option"]');
-            
-            if (option) {
-                // 如果找到了 option，插入到它后面
-                refNode = option.nextSibling;
-            } else {
-                // 如果没找到 option，直接 append 到最后（refNode = null）
-                refNode = null;
-            }
-        }
+      if (!mtime) return;
 
-        if (container) {
-          // 防止重复插入到同一个容器（应对 li 和 relation-card 同时被选中的情况）
-          if (container.getAttribute('data-bili-pin-time-injected')) return;
+      const container = card.querySelector<HTMLElement>('.relation-card-info');
+      if (!container) return;
 
-          const timeDiv = document.createElement('div');
-          timeDiv.style.color = '#61666D'; // 使用 B 站次级文字颜色
-          timeDiv.style.fontSize = '12px';
-          timeDiv.style.marginTop = '8px'; // 与上方按钮保持间距
-          timeDiv.style.marginBottom = '0px'; 
-          timeDiv.style.lineHeight = '1.5';
-          timeDiv.style.fontFamily = '"PingFang SC", HarmonyOS_Regular, "Helvetica Neue", "Microsoft YaHei", sans-serif';
-          timeDiv.textContent = `关注时间: ${formatTime(mtime)}`;
-          
-          if (refNode) {
-              container.insertBefore(timeDiv, refNode);
-          } else {
-              container.appendChild(timeDiv);
-          }
-          
-          container.setAttribute('data-bili-pin-time-injected', '1');
-          card.setAttribute(PROCESSED_ATTR, '1');
-        }
+      if (container.getAttribute(TIME_MARK_ATTR) === '1') {
+        card.setAttribute(PROCESSED_ATTR, '1');
+        return;
       }
+
+      const option = container.querySelector('[class*="option"]');
+      const timeDiv = document.createElement('div');
+      timeDiv.style.color = '#61666D';
+      timeDiv.style.fontSize = '12px';
+      timeDiv.style.marginTop = '8px';
+      timeDiv.style.marginBottom = '0px';
+      timeDiv.style.lineHeight = '1.5';
+      timeDiv.style.fontFamily = '"PingFang SC", HarmonyOS_Regular, "Helvetica Neue", "Microsoft YaHei", sans-serif';
+      timeDiv.textContent = `关注时间: ${formatTime(mtime)}`;
+
+      if (option?.nextSibling) {
+        container.insertBefore(timeDiv, option.nextSibling);
+      } else {
+        container.appendChild(timeDiv);
+      }
+
+      container.setAttribute(TIME_MARK_ATTR, '1');
+      card.setAttribute(PROCESSED_ATTR, '1');
     });
   };
 
-  const observer = new MutationObserver((mutations) => {
-    // 简单的节流或者直接检查
+  const bindListObserver = () => {
+    const nextRoot = findRelationListRoot();
+    if (nextRoot === observedListRoot) return;
+
+    if (listObserver) {
+      listObserver.disconnect();
+      listObserver = null;
+    }
+
+    observedListRoot = nextRoot;
+    if (!nextRoot) return;
+
+    listObserver = new MutationObserver(() => {
+      scheduleCheck();
+    });
+    listObserver.observe(nextRoot, { childList: true, subtree: true });
+  };
+
+  const scan = () => {
+    scheduled = false;
     check();
+    bindListObserver();
+  };
+
+  const scheduleCheck = () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(scan);
+  };
+
+  const ensureRootObserver = () => {
+    if (rootObserver || !document.body) return;
+    rootObserver = new MutationObserver(() => {
+      if (observedListRoot && document.contains(observedListRoot)) return;
+      observedListRoot = null;
+      scheduleCheck();
+    });
+    rootObserver.observe(document.body, { childList: true, subtree: false });
+  };
+
+  ensureRootObserver();
+  scheduleCheck();
+
+  window.addEventListener('popstate', () => {
+    observedListRoot = null;
+    scheduleCheck();
   });
-
-  if (document.body) {
-      observer.observe(document.body, { childList: true, subtree: true });
-  } else {
-      document.addEventListener('DOMContentLoaded', () => {
-          observer.observe(document.body, { childList: true, subtree: true });
-      });
-  }
-
-  // 初始检查
-  check();
-  
-  // 监听 URL 变化（B站是单页应用）
-  // 虽然 MutationObserver 会捕获大部分页面变化，但手动 check 确保 URL 变动后立即响应
-  window.addEventListener('popstate', check);
-
-  // 监听 API 数据更新
-  window.addEventListener('bili-pin:relation-list-updated', check);
-
-  // 某些框架路由可能不触发 popstate，MutationObserver 应该能覆盖
+  window.addEventListener('bili-pin:relation-list-updated', scheduleCheck);
 }
-
