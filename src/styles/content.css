@@ -348,6 +348,61 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   background: transparent;
 }
 
+.bili-user-profile-view__info__button.bili-pin-user-profile-button {
+  width: 88px;
+  margin-left: 8px;
+  border-color: var(--text3, #9499a0);
+  color: var(--text2, #61666d);
+  background-color: transparent;
+  white-space: nowrap;
+}
+
+.bili-user-profile-view__info__button.bili-pin-user-profile-button:hover,
+.bili-user-profile-view__info__button.bili-pin-user-profile-button:focus-visible {
+  border-color: var(--brand_blue, #00a1d6);
+  color: var(--brand_blue, #00a1d6);
+  background-color: rgba(0, 161, 214, 0.08);
+}
+
+.bili-user-profile-view__info__button.bili-pin-user-profile-button.is-pinned {
+  border-color: var(--graph_bg_thick, #e3e5e7);
+  color: var(--text3, #9499a0);
+  background-color: var(--graph_bg_thick, #f1f2f3);
+}
+
+.bili-user-profile-view__info__button.bili-pin-user-profile-button.is-pinned:hover,
+.bili-user-profile-view__info__button.bili-pin-user-profile-button.is-pinned:focus-visible {
+  background-color: var(--graph_bg_regular, #f6f7f8);
+}
+
+.user-actions .bili-pin-search-user-button {
+  margin-left: 8px;
+  border-color: var(--text3, #9499a0);
+  color: var(--text2, #61666d);
+  background-color: transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.user-actions .bili-pin-search-user-button:hover,
+.user-actions .bili-pin-search-user-button:focus-visible {
+  border-color: var(--brand_blue, #00a1d6);
+  color: var(--brand_blue, #00a1d6);
+  background-color: rgba(0, 161, 214, 0.08);
+}
+
+.user-actions .bili-pin-search-user-button.is-pinned {
+  border-color: var(--graph_bg_thick, #e3e5e7);
+  color: var(--text3, #9499a0);
+  background-color: var(--graph_bg_thick, #f1f2f3);
+}
+
+.user-actions .bili-pin-search-user-button.is-pinned:hover,
+.user-actions .bili-pin-search-user-button.is-pinned:focus-visible {
+  background-color: var(--graph_bg_regular, #f6f7f8);
+}
+
 /* hover/聚焦时显示按钮 */
 .bili-dyn-up-list__item:hover .bili-pin-btn,
 .bili-dyn-up-list__item:focus-within .bili-pin-btn {

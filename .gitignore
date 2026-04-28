@@ -7,3 +7,5 @@ dist/
 debug/
 .dev/
 *.pem
+pages/
+docs/pages/
