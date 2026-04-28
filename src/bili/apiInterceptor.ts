@@ -317,7 +317,7 @@ function interceptFetch(): void {
   
   window.fetch = async function(...args) {
     const req = args[0] as (string | URL | Request | undefined);
-    const url =
+    const rawUrl =
       typeof req === 'string'
         ? req
         : req instanceof Request
@@ -325,47 +325,45 @@ function interceptFetch(): void {
           : req instanceof URL
             ? req.toString()
             : '';
-    const needProcess = shouldProcessApiUrl(url);
-    
-    // 只拦截B站API请求
-    if (url.includes('api.bilibili.com')) {
+
+    let finalUrl = rawUrl;
+    if (rawUrl.includes('api.bilibili.com')) {
       try {
-        // 若正在“切换到某个 mid”，则改写 feed 请求的 host_mid
         if (typeof args[0] === 'string') {
-          args[0] = rewriteHostMidIfNeeded(args[0]);
+          finalUrl = rewriteHostMidIfNeeded(args[0]);
+          args[0] = finalUrl;
+        } else if (args[0] instanceof URL) {
+          finalUrl = rewriteHostMidIfNeeded(args[0].toString());
+          args[0] = new URL(finalUrl);
         } else if (args[0] && typeof (args[0] as any).url === 'string') {
           const req = args[0] as Request;
-          const rewritten = rewriteHostMidIfNeeded(req.url);
-          if (rewritten !== req.url) {
-            args[0] = new Request(rewritten, req);
+          finalUrl = rewriteHostMidIfNeeded(req.url);
+          if (finalUrl !== req.url) {
+            args[0] = new Request(finalUrl, req);
           }
         }
-
-        const response = await originalFetch.apply(this, args);
-        
-        // 仅对目标接口解析 JSON，避免对大量无关 API 响应做解析导致长期性能/内存压力
-        if (needProcess) {
-          // 克隆响应以便读取（原始响应只能读取一次）
-          const clonedResponse = response.clone();
-          // 异步处理响应，不阻塞原始请求
-          clonedResponse
-            .json()
-            .then((data: any) => {
-              processApiResponse(url, data);
-            })
-            .catch(() => {
-              // 如果不是JSON响应，忽略
-            });
-        }
-        
-        return response;
       } catch (error) {
-        console.warn('[bili-pin] fetch interception error', error);
-        return originalFetch.apply(this, args);
+        console.warn('[bili-pin] fetch URL rewrite failed', error);
+        finalUrl = rawUrl;
       }
     }
+
+    const response = await originalFetch.apply(this, args);
+
+    // 仅对目标接口解析 JSON，避免对大量无关 API 响应做解析导致长期性能/内存压力
+    if (shouldProcessApiUrl(finalUrl)) {
+      response
+        .clone()
+        .json()
+        .then((data: any) => {
+          processApiResponse(finalUrl, data);
+        })
+        .catch(() => {
+          // 如果不是JSON响应，忽略
+        });
+    }
     
-    return originalFetch.apply(this, args);
+    return response;
   };
 }
 
@@ -393,30 +391,19 @@ function interceptXHR(): void {
   XMLHttpRequest.prototype.send = function(this: XMLHttpRequest, body?: Document | XMLHttpRequestBodyInit | null) {
     const xhr = this as any;
     const url = xhr._biliPinUrl || '';
-    const needProcess = shouldProcessApiUrl(url);
     
-    // 只拦截B站API请求
-    if (url.includes('api.bilibili.com') && needProcess) {
-      const originalOnReadyStateChange = xhr.onreadystatechange;
-      
-      xhr.onreadystatechange = function() {
-        if (originalOnReadyStateChange) {
-          originalOnReadyStateChange.apply(this, arguments as any);
+    if (shouldProcessApiUrl(url)) {
+      xhr.addEventListener('loadend', () => {
+        if (xhr.status !== 200) return;
+        try {
+          const responseText = xhr.responseText;
+          if (!responseText) return;
+          const data = JSON.parse(responseText);
+          processApiResponse(url, data);
+        } catch {
+          // 忽略解析错误
         }
-        
-        // 当请求完成时，提取数据
-        if (xhr.readyState === 4 && xhr.status === 200) {
-          try {
-            const responseText = xhr.responseText;
-            if (responseText) {
-              const data = JSON.parse(responseText);
-              processApiResponse(url, data);
-            }
-          } catch (error) {
-            // 忽略解析错误
-          }
-        }
-      };
+      });
     }
     
     return originalSend.call(this, body as any);
@@ -511,4 +498,3 @@ export function getAllCachedUpInfo(): UpInfo[] {
 export function getLastPortalUpList(): UpInfo[] {
   return lastPortalUpList;
 }
-

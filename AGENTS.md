@@ -105,13 +105,14 @@
 
 ## 6. 当前状态与近期变更
 
-**当前版本：`v1.1.4`**
+**当前版本：`v1.1.5`**
 
 ### 文档同步（不改版本号）
 - `2026-04-23`：全量核对仓库内 `*.md` 文档与当前代码实现，修正了 `README.md`、`docs/roadmap.md`、`docs/prd.md`、`AGENTS.md` 中关于置顶栏交互、存储方案、模块拆分和运行环境的过时描述；本次仅同步文档，不变更运行时代码与版本号。
 - `2026-04-23`：按当前实现重写 `docs/prd.md`，不再保留旧版本功能文案与历史补注，仅保留简介与背景，并改为面向维护者说明“当前功能模块、页面入口、核心模块、数据同步与实现方式”；同步将本章对 `docs/prd.md` 的定位从“历史需求档案”更新为“项目简介、背景与当前结构说明”。
 
 ### 已完成（最近在上面的变更）
+- `v1.1.5`：重新审视全项目中长期运行、频繁 DOM 变化和网络拦截相关链路后，确认上一轮已把主要观察器范围收敛到低风险形态；本次进一步收紧 `apiInterceptor` 的 fetch / XHR 拦截实现。fetch 拦截不再用宽泛 `try/catch` 包住真实网络请求，避免请求失败时被扩展误触发第二次请求；只在 URL 改写阶段捕获异常，真实 `fetch` 错误保持页面原语义。XHR 响应提取从覆盖 `onreadystatechange` 改为追加 `loadend` 监听，避免和页面后续赋值互相覆盖，同时仍只解析我们关心的 B 站接口。同步修正 `package-lock.json` 根版本号与 `package.json` 一致。涉及文件：`src/bili/apiInterceptor.ts`、`package.json`、`package-lock.json`。验证：`npm run typecheck`、`npm run build` 通过；动态页/空间页依赖的 `portal/uplist/feed/relation` 缓存仍应正常回灌，切换置顶 UP 时 feed 请求仍会按需改写 `host_mid`，普通网络失败不应被扩展重试成重复请求。
 - `v1.1.4`：对整项目中最容易出现无意义性能开销和长时间挂机风险的观察器/刷新链路做了一轮收敛，保持功能不变但把实现拉回更直接的方案。空间页的关注时间注入不再长期监听整个 `document.body subtree`，而是改为先定位关注列表，再把观察范围收窄到实际列表容器，并用单帧调度合并重复检查；视频页“已关注”菜单改为显式追踪每个弹层对应的 `MutationObserver`，在弹层节点移除时主动断开，避免观察器跟着被销毁的 popover 残留；动态页卡片三点菜单把频繁的全局 attach 检测合并到同一帧，并在 hover 重试前清理上一次未完成的定时器，减少空转；推荐横条图钉按钮移除了每个按钮各自的一次性兜底 `setTimeout`，改由现有的 `portal/uplist` 事件和列表变更统一驱动重刷，同时把推荐栏 subtree 变化合并到单帧刷新，避免批量 DOM 追加时重复 `refreshPinUi`。涉及文件：`src/ui/followTime.ts`、`src/ui/videoFollowMenuPin.ts`、`src/ui/dynamicMoreMenuPin.ts`、`src/ui/injectPinButtons.ts`、`package.json`。验证：`npm run typecheck`、`npm run build` 通过；空间页“全部关注”列表首次进入、切换分页/路由、接口数据回灌后都应继续显示关注时间；视频页反复打开/关闭“已关注”菜单后仍能稳定显示置顶项，长时间停留不应因弹层 observer 累积而持续增长；动态页加载更多、hover 三点菜单、推荐横条异步补全 mid 时，置顶按钮与菜单项仍能正确出现且不会因为重复刷新造成明显抖动。
 - `v1.1.3`：修复动态页置顶栏高度相关的一整批未发版问题，并将该批返工统一收敛到同一个目标版本，而不再额外占用 `v1.1.4+`。本次最终实现同时解决了两个用户可见缺陷：一是刷新后高度会逐次变高，原因是持久化逻辑曾误把 `.bili-pin-bar__list` 的渲染总高度（包含 padding）当成 CSS `height` 写回；二是手动调整后的高度在刷新后会退回默认两行，原因是中途返工时把“当前显示高度”和“已持久化高度”混在了一起，导致保存链路被自己短路。现已按更直接的方案收敛：初始化时读取并应用已保存高度；拖拽结束 (`pointerup/pointercancel`) 时把最终高度串行写入 storage；不再依赖 `ResizeObserver`、防抖定时器或多份 DOM dataset 影子状态回写，减少竞态与无意义的持续开销。同时把扩展 manifest 版本号改为直接读取 `package.json`，让版本只维护一处。涉及文件：`src/ui/pinBar.ts`、`package.json`、`wxt.config.ts`。验证：`npm run typecheck`、`npm run build` 通过；页面上不拖拽时连续刷新高度应保持不变，手动拖拽后无论立即刷新还是多次快速调整后刷新，都应恢复到最后一次释放手柄时的高度；`.output/chrome-mv3/manifest.json` 的 `version` 应与 `package.json` 一致为 `1.1.3`。
 - `v1.1.2`：将动态页置顶栏从单一“展开/收起”切换为可自由纵向拉伸的滚动容器；置顶头像过多时可通过底部正中央的拖拽手柄调整高度，并通过纵向滚动条浏览完整列表；新增置顶栏高度的 `sync/local` 镜像存储与时间戳状态，已打开页面刷新后仍保留上次拉伸结果，同时兼容旧版展开状态作为一次性迁移回退；移除头部“恢复默认高度”按钮，改为更克制的底部拖拽交互。涉及文件：`src/ui/pinBar.ts`、`src/styles/content.css`、`src/storage/keys.ts`、`package.json`、`wxt.config.ts`。验证：`npm run typecheck` 通过，页面上需重点确认底部手柄拖拽、高度持久化、滚动浏览，以及点击头像切换 Feed/拖拽排序未回归；`npm run build` 后产物 manifest 版本应为 `1.1.2`。
