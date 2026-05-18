@@ -1,6 +1,6 @@
 import { filterFeedDirectly } from '../bili/clickBridge';
 import { getPinnedUps, pinUp, setPinnedUps, unpinUp, onPinsChange, type PinnedUp } from '../storage/pins';
-import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveUid } from './pinBar';
+import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveMid } from './pinBar';
 import { showToast } from './toast';
 import { getDesiredHostMid, getUpInfoByFace, getUpInfoByName, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
 import { forceReloadAllFeed } from '../bili/feedSwitch';
@@ -270,7 +270,7 @@ function observeRecommendationListSelection(stripRoot: HTMLElement): void {
         
         forceReloadAllFeed(stripRoot);
         // 清空置顶栏高亮
-        setActiveUid(null);
+        setActiveMid(null);
         return;
       }
     }
@@ -279,14 +279,14 @@ function observeRecommendationListSelection(stripRoot: HTMLElement): void {
 
     if (!mid) {
       // 点击了“全部动态”之类拿不到 mid 的入口：清空置顶栏高亮
-      setActiveUid(null);
+      setActiveMid(null);
       return;
     }
 
     getPinnedUps().then((pinned) => {
       const isPinned = pinned.some((p) => p.mid === mid);
       // 点击了一个已置顶的UP：同步高亮；否则清空高亮，避免误导
-      setActiveUid(isPinned ? mid : null);
+      setActiveMid(isPinned ? mid : null);
     });
     },
     true,
@@ -309,7 +309,7 @@ function installGlobalExitFilterListenersOnce(): void {
       const tabItem = target.closest<HTMLElement>('.bili-dyn-list-tabs__item');
       if (!tabItem) return;
       setDesiredHostMid(null);
-      setActiveUid(null);
+      setActiveMid(null);
     },
     true,
   );
@@ -354,11 +354,10 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
   renderPinBar(bar, pinnedForRender, {
     onClickMid: async (mid) => {
       // 设置高亮（在点击时立即显示反馈）
-      setActiveUid(mid);
+      setActiveMid(mid);
       
       // 直接在动态页内切换（不再打开空间页/不再桥接 DOM 点击）
-      const pinnedUp = pinnedForRender.find((p) => p.mid === mid);
-      const ok = await filterFeedDirectly(stripRoot, mid, pinnedUp?.name, pinnedUp?.face);
+      const ok = await filterFeedDirectly(stripRoot, mid);
       if (!ok) showToast('切换失败：暂时无法在动态页内刷新该UP的Feed，请稍后重试');
     },
     onUnpinMid: async (mid) => {

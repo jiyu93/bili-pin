@@ -163,6 +163,7 @@
 
 ### 最近维护记录（不改版本号）
 
+- `2026-05-18`：按 commit skill 标准做项目级收尾检查，不只检查未提交 diff；全仓库扫描旧口径、临时残留、调试残留和版本一致性后，将内部动态页 mid 相关命名从早期 `uid` 收敛为 `mid`，并移除 `filterFeedDirectly` 不再使用的 name/face 参数。保留 B 站接口响应中的 `mid ?? uid` 兼容读取，不改变存储 schema、用户数据或运行行为。本次为内部命名与维护性收口，不提升版本号。涉及文件：`src/bili/selectors.ts`、`src/bili/clickBridge.ts`、`src/ui/injectPinButtons.ts`、`src/ui/pinBar.ts`、`AGENTS.md`。验证：`npm run typecheck`、`npm run build`、`git diff --check` 通过；`.output/chrome-mv3/manifest.json` 的 `version` 与 `package.json` 一致为 `1.2.0`。
 - `2026-05-18`：重写 `AGENTS.md` 为当前维护手册，压缩早期流水账式版本记录，明确工作方式、账号安全边界、架构不变量、性能约束、功能模块速查和验收路径；同步修正 `README.md`、`docs/prd.md`、`docs/roadmap.md` 中关于搜索页、动态页 hover 用户资料卡和当前版本的旧口径。本次仅改文档，不修改运行时代码，不提升版本号。涉及文件：`AGENTS.md`、`README.md`、`docs/prd.md`、`docs/roadmap.md`。验证：人工核对入口文件、storage、API 拦截和主要 UI 模块；`git diff --check` 通过；未运行构建，因本次无代码变更。
 - `2026-04-28`：补充页面快照与 Computer Use 边界。AI 可读取 `pages/` / `docs/pages/` 中的私有 HTML 作为 DOM 依据，但禁止提交或摘录个人内容；Computer Use 只用于轻量观察，不能替代 DOM 证据。
 - `2026-04-23`：核对并修正仓库 Markdown 文档中关于置顶栏、存储方案、模块拆分和运行环境的过时描述；同步重写 `docs/prd.md` 为当前实现说明。

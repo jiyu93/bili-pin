@@ -358,17 +358,17 @@ function updatePinBarLayout(bar: HTMLElement): void {
 /**
  * 设置当前激活的UP（用于高亮显示）
  */
-export function setActiveUid(uid: string | null): void {
-  currentActiveMid = uid;
+export function setActiveMid(mid: string | null): void {
+  currentActiveMid = mid;
   updateActiveHighlight();
 
   // 如果激活了某个UP，清除其更新状态（消蓝点）
-  if (uid) {
-    markUpAsRead(uid);
+  if (mid) {
+    markUpAsRead(mid);
     // 立即更新DOM，移除蓝点
     const bar = document.getElementById(PIN_BAR_ID);
     if (bar) {
-      const item = bar.querySelector<HTMLElement>(`.bili-pin-bar__item[data-mid="${uid}"]`);
+      const item = bar.querySelector<HTMLElement>(`.bili-pin-bar__item[data-mid="${mid}"]`);
       if (item) {
         const dot = item.querySelector('.bili-pin-bar__updateDot');
         if (dot) dot.remove();
@@ -480,7 +480,7 @@ export function renderPinBar(
       }
 
       // 设置高亮
-      setActiveUid(up.mid);
+      setActiveMid(up.mid);
       handlers.onClickMid?.(up.mid);
     });
 

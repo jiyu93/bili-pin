@@ -1,33 +1,33 @@
-const UID_RE_SPACE = /(?:^|\/)space\.bilibili\.com\/(\d+)(?:[/?#]|$)/i;
-const UID_RE_MID_PARAM = /[?&#]mid=(\d+)(?:[&#]|$)/i;
+const MID_RE_SPACE = /(?:^|\/)space\.bilibili\.com\/(\d+)(?:[/?#]|$)/i;
+const MID_RE_PARAM = /[?&#]mid=(\d+)(?:[&#]|$)/i;
 
-export function extractUidFromHref(href: string): string | null {
+export function extractMidFromHref(href: string): string | null {
   const s = String(href ?? '');
-  const m1 = s.match(UID_RE_SPACE);
+  const m1 = s.match(MID_RE_SPACE);
   if (m1?.[1]) return m1[1];
-  const m2 = s.match(UID_RE_MID_PARAM);
+  const m2 = s.match(MID_RE_PARAM);
   if (m2?.[1]) return m2[1];
   return null;
 }
 
 export function findSpaceAnchors(root: ParentNode = document): HTMLAnchorElement[] {
   const all = Array.from(root.querySelectorAll<HTMLAnchorElement>('a[href]'));
-  return all.filter((a) => extractUidFromHref(a.href));
+  return all.filter((a) => extractMidFromHref(a.href));
 }
 
-type Candidate = { el: HTMLElement; score: number; uidCount: number };
+type Candidate = { el: HTMLElement; score: number; midCount: number };
 
-function uniqueUidCount(el: HTMLElement): number {
-  const uids = new Set<string>();
+function uniqueMidCount(el: HTMLElement): number {
+  const mids = new Set<string>();
   for (const a of findSpaceAnchors(el)) {
-    const uid = extractUidFromHref(a.href);
-    if (uid) uids.add(uid);
+    const mid = extractMidFromHref(a.href);
+    if (mid) mids.add(mid);
   }
-  return uids.size;
+  return mids.size;
 }
 
-function computeScore(el: HTMLElement, uidCount: number): number {
-  let score = uidCount;
+function computeScore(el: HTMLElement, midCount: number): number {
+  let score = midCount;
 
   const rect = el.getBoundingClientRect();
   // 靠近页面顶部的候选更可能是“关注UP推荐列表”
@@ -74,38 +74,38 @@ export function findUpAvatarStripRoot(): HTMLElement | null {
     const rect = el.getBoundingClientRect();
     if (rect.height > 800) continue;
 
-    const uidCount = uniqueUidCount(el);
-    if (uidCount < 6) continue;
-    scored.push({ el, uidCount, score: computeScore(el, uidCount) });
+    const midCount = uniqueMidCount(el);
+    if (midCount < 6) continue;
+    scored.push({ el, midCount, score: computeScore(el, midCount) });
   }
 
   scored.sort((a, b) => b.score - a.score);
   return scored[0]?.el ?? null;
 }
 
-export function getStripUids(stripRoot: HTMLElement): string[] {
-  const uids: string[] = [];
+export function getStripMids(stripRoot: HTMLElement): string[] {
+  const mids: string[] = [];
   const seen = new Set<string>();
   for (const a of findSpaceAnchors(stripRoot)) {
-    const uid = extractUidFromHref(a.href);
-    if (!uid || seen.has(uid)) continue;
-    seen.add(uid);
-    uids.push(uid);
+    const mid = extractMidFromHref(a.href);
+    if (!mid || seen.has(mid)) continue;
+    seen.add(mid);
+    mids.push(mid);
   }
-  return uids;
+  return mids;
 }
 
 export type UpStripDiagnostics = {
   url: string;
   title: string;
   totalAnchors: number;
-  uidAnchors: number;
-  sampleUidHrefs: Array<{ uid: string; href: string }>;
+  midAnchors: number;
+  sampleMidHrefs: Array<{ mid: string; href: string }>;
   candidateCount: number;
   topCandidates: Array<{
     tag: string;
     className: string;
-    uidCount: number;
+    midCount: number;
     score: number;
     rect: { top: number; left: number; width: number; height: number };
     styleHint: { display: string; overflowX: string; whiteSpace: string };
@@ -134,18 +134,18 @@ export function findDynamicFeedContainer(): HTMLElement | null {
 
 export function getUpAvatarStripDiagnostics(): UpStripDiagnostics {
   const allAnchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'));
-  const uidAnchors = findSpaceAnchors(document);
+  const midAnchors = findSpaceAnchors(document);
 
-  const sampleUidHrefs: Array<{ uid: string; href: string }> = [];
-  for (const a of uidAnchors.slice(0, 12)) {
-    const uid = extractUidFromHref(a.href);
-    if (!uid) continue;
-    sampleUidHrefs.push({ uid, href: a.href });
+  const sampleMidHrefs: Array<{ mid: string; href: string }> = [];
+  for (const a of midAnchors.slice(0, 12)) {
+    const mid = extractMidFromHref(a.href);
+    if (!mid) continue;
+    sampleMidHrefs.push({ mid, href: a.href });
   }
 
   // 候选评分（与 findUpAvatarStripRoot 相同逻辑，但会返回前 N 个，方便调试）
   const candidates = new Set<HTMLElement>();
-  for (const a of uidAnchors) {
+  for (const a of midAnchors) {
     const p1 = a.parentElement;
     const p2 = p1?.parentElement;
     const p3 = p2?.parentElement;
@@ -160,9 +160,9 @@ export function getUpAvatarStripDiagnostics(): UpStripDiagnostics {
   for (const el of candidates) {
     const rect = el.getBoundingClientRect();
     if (rect.height > 800) continue;
-    const uidCount = uniqueUidCount(el);
-    if (uidCount < 3) continue;
-    scored.push({ el, uidCount, score: computeScore(el, uidCount) });
+    const midCount = uniqueMidCount(el);
+    if (midCount < 3) continue;
+    scored.push({ el, midCount, score: computeScore(el, midCount) });
   }
   scored.sort((a, b) => b.score - a.score);
 
@@ -172,7 +172,7 @@ export function getUpAvatarStripDiagnostics(): UpStripDiagnostics {
     return {
       tag: c.el.tagName.toLowerCase(),
       className: c.el.className || '',
-      uidCount: c.uidCount,
+      midCount: c.midCount,
       score: c.score,
       rect: {
         top: Math.round(rect.top),
@@ -192,11 +192,10 @@ export function getUpAvatarStripDiagnostics(): UpStripDiagnostics {
     url: location.href,
     title: document.title,
     totalAnchors: allAnchors.length,
-    uidAnchors: uidAnchors.length,
-    sampleUidHrefs,
+    midAnchors: midAnchors.length,
+    sampleMidHrefs,
     candidateCount: scored.length,
     topCandidates,
   };
 }
-
 
