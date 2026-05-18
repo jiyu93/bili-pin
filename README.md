@@ -1,7 +1,7 @@
 <div align="center">
   <img src="public/icons/icon.svg" width="120" height="120" alt="Bili Pin Logo" />
   <h1>Bili Pin</h1>
-  <p>一个 Bilibili 浏览器扩展，在动态页置顶你最关心的 UP 主，并把置顶入口延伸到动态卡片、空间页和视频页。</p>
+  <p>一个 Bilibili 浏览器扩展，在动态页置顶你最关心的 UP 主，并把置顶入口延伸到动态卡片、搜索页、空间页和视频页。</p>
 </div>
 
 ## ✨ 主要功能
@@ -17,6 +17,8 @@
   为了保持流畅的原生体验，我们在多处集成了置顶入口：
   - 动态页推荐横条（头像右上角图钉按钮）
   - 动态卡片右上角“三点菜单”
+  - 动态页头像 / 昵称 hover 用户资料卡
+  - 搜索页用户结果卡片
   - UP 主空间页 / 视频播放页的“已关注”菜单
 
 - **🕒 关注时间显示**
@@ -32,6 +34,7 @@
 
 - **运行环境拆分**
   - 动态页和空间页的内容脚本运行在 `MAIN` world，尽早拦截必须的 B 站接口，只缓存 `portal/uplist/feed/relation` 这些真正依赖的响应。
+  - 搜索页内容脚本运行在 `MAIN` world，但不拦截 API，只基于用户结果卡片中的 space 链接注入置顶入口。
   - 视频页同样运行在 `MAIN` world，但当前不拦截 API，而是直接读取 `window.__INITIAL_STATE__` 和页面 DOM 来识别 UP 主。
 - **存储访问**
   - `entrypoints/storageBridge.content.ts` 运行在 `ISOLATED` world，为 `MAIN` world 提供 `chrome.storage.local/sync` 代理。
