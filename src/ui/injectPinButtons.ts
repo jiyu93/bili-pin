@@ -321,7 +321,6 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
 
   // 回填/修正昵称与头像：space 页置顶时可能缺 portal 缓存（或曾经抓错 DOM），导致 name/face 不准。
   // 动态页 portal 有可靠的 {mid,name,face}，因此优先用它修正并写回 storage（一次性纠正历史脏数据）。
-  let needWriteBack = false;
   const enriched = pinned.map((p) => {
     const info = getUpInfoByMid(p.mid);
     if (!info) return p;
@@ -339,14 +338,10 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
       // 头像只在必要时回填
       face: currentFace ? currentFace : (isLikelyFaceUrl(face) ? face : undefined) ?? normalizeFaceUrl(p.face),
     };
-    if (next.name !== p.name || next.face !== p.face) needWriteBack = true;
     return next;
   });
-  if (needWriteBack) {
-    await setPinnedUps(enriched);
-  }
 
-  const pinnedForRender = needWriteBack ? enriched : pinned;
+  const pinnedForRender = enriched;
   const pinnedSet = new Set(pinnedForRender.map((x) => x.mid));
 
   const bar = ensurePinBar(stripRoot);

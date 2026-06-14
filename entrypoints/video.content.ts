@@ -2,7 +2,6 @@ import contentStyles from '../src/styles/content.css?inline';
 import { injectStyleTag } from '../src/utils/style';
 import { observeVideoFollowMenu } from '../src/ui/videoFollowMenuPin';
 import { installDebugBridge } from '../src/bili/debugBridge';
-import { installStorageWarningToast } from '../src/ui/storageWarning';
 
 export default defineContentScript({
   matches: ['https://www.bilibili.com/video/*'],
@@ -11,7 +10,6 @@ export default defineContentScript({
   world: 'MAIN',
   main() {
     injectStyleTag(contentStyles, 'bili-pin-video-style');
-    installStorageWarningToast();
     installDebugBridge();
     observeVideoFollowMenu();
   },

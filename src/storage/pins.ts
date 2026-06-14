@@ -1,6 +1,6 @@
 // 注意：本项目的“UP 唯一标识”使用 B 站 mid（数字字符串）
 
-import { observeStorageChanges, readStorageValue, writeMirroredConfig, writeStorageValue } from './config';
+import { observeStorageChanges, readStorageValue, writeSyncPrimaryConfig } from './config';
 import {
   PINS_KEY as STORAGE_KEY,
   PINS_STATE_COMPACT_KEY as STORAGE_COMPACT_KEY,
@@ -40,6 +40,8 @@ type CompactPinsState = [
 ];
 
 const SYNC_QUOTA_BYTES_PER_ITEM = 8192;
+const PINS_SYNC_QUOTA_MESSAGE = '同步空间已满，无法继续置顶。请先取消一些置顶UP主。';
+const PINS_SYNC_RATE_LIMIT_MESSAGE = '同步写入过于频繁，请稍等一分钟后再试。';
 
 function serializeList(value: unknown): string {
   return JSON.stringify(value ?? null);
@@ -130,6 +132,22 @@ function getStorageItemBytes(key: string, value: unknown): number {
 
 function fitsSyncItemQuota(key: string, value: unknown): boolean {
   return getStorageItemBytes(key, value) <= SYNC_QUOTA_BYTES_PER_ITEM;
+}
+
+function assertFitsSyncItemQuota(key: string, value: unknown): void {
+  if (fitsSyncItemQuota(key, value)) return;
+  throw new Error(PINS_SYNC_QUOTA_MESSAGE);
+}
+
+function normalizePinsWriteError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/MAX_WRITE_OPERATIONS_PER_MINUTE|max_write/i.test(message)) {
+    return new Error(PINS_SYNC_RATE_LIMIT_MESSAGE);
+  }
+  if (/quota|bytes per item|QUOTA_BYTES/i.test(message)) {
+    return new Error(PINS_SYNC_QUOTA_MESSAGE);
+  }
+  return error instanceof Error ? error : new Error(message);
 }
 
 function getCompactBaseTime(state: PinsState): number {
@@ -328,10 +346,6 @@ function derivePinnedUpsFromState(state: PinsState): PinnedUp[] {
   return ordered;
 }
 
-function serializeCompactPinsState(state: PinsState): string {
-  return JSON.stringify(compactPinsState(state));
-}
-
 function mergePinsStates(states: PinsState[]): PinsState {
   const candidates = states
     .filter((state) => hasPinsStateData(state))
@@ -397,34 +411,14 @@ function mergePinsStates(states: PinsState[]): PinsState {
   };
 }
 
-async function writeLegacyPinsSnapshot(state: PinsState): Promise<void> {
-  const list = derivePinnedUpsFromState(state);
-  const writes: Promise<void>[] = [
-    writeStorageValue('local', STORAGE_STATE_KEY, state),
-    writeStorageValue('local', STORAGE_KEY, list),
-  ];
-
-  if (fitsSyncItemQuota(STORAGE_STATE_KEY, state)) {
-    writes.push(writeStorageValue('sync', STORAGE_STATE_KEY, state));
+async function writePinsSnapshot(state: PinsState): Promise<void> {
+  const compact = compactPinsState(state);
+  assertFitsSyncItemQuota(STORAGE_COMPACT_KEY, compact);
+  try {
+    await writeSyncPrimaryConfig(STORAGE_COMPACT_KEY, compact);
+  } catch (error) {
+    throw normalizePinsWriteError(error);
   }
-
-  if (fitsSyncItemQuota(STORAGE_KEY, list)) {
-    writes.push(writeStorageValue('sync', STORAGE_KEY, list));
-  }
-
-  const results = await Promise.allSettled(writes);
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      console.warn('[bili-pin] failed to write legacy pins snapshot', result.reason);
-    }
-  }
-}
-
-async function writePinsSnapshot(state: PinsState, options: { notifySyncError?: boolean } = {}): Promise<void> {
-  await writeMirroredConfig(STORAGE_COMPACT_KEY, compactPinsState(state), {
-    notifySyncError: options.notifySyncError,
-  });
-  await writeLegacyPinsSnapshot(state);
 }
 
 function hasPinsStateData(state: PinsState): boolean {
@@ -448,37 +442,13 @@ async function getAuthoritativePinsState(): Promise<PinsState> {
     ? normalizePinsState(localStateEntry.value)
     : buildPinsStateFromList(normalizeList(localLegacyEntry.value));
   const syncCompactState = syncCompactEntry.found ? normalizeCompactPinsState(syncCompactEntry.value) : buildPinsStateFromList([]);
-  const localCompactState = localCompactEntry.found ? normalizeCompactPinsState(localCompactEntry.value) : buildPinsStateFromList([]);
   const syncListState = buildPinsStateFromList(normalizeList(syncLegacyEntry.value));
+  const syncAuthoritative = mergePinsStates([syncState, syncListState, syncCompactState]);
+  const syncHasData = hasPinsStateData(syncAuthoritative);
+  const localCompactState = localCompactEntry.found ? normalizeCompactPinsState(localCompactEntry.value) : buildPinsStateFromList([]);
   const localListState = buildPinsStateFromList(normalizeList(localLegacyEntry.value));
-  const authoritative = mergePinsStates([
-    syncState,
-    localState,
-    syncListState,
-    localListState,
-    syncCompactState,
-    localCompactState,
-  ]);
-  const authoritativeList = derivePinnedUpsFromState(authoritative);
-  const authoritativeCompact = compactPinsState(authoritative);
-
-  const syncRawList = normalizeList(syncLegacyEntry.value);
-  const localRawList = normalizeList(localLegacyEntry.value);
-  const syncCompactChanged = serializeCompactPinsState(syncCompactState) !== JSON.stringify(authoritativeCompact);
-  const localCompactChanged = serializeCompactPinsState(localCompactState) !== JSON.stringify(authoritativeCompact);
-  const syncRawChanged = serializeList(syncRawList) !== serializeList(authoritativeList);
-  const localRawChanged = serializeList(localRawList) !== serializeList(authoritativeList);
-  const compactFitsSync = fitsSyncItemQuota(STORAGE_COMPACT_KEY, authoritativeCompact);
-  const legacyFitsSync = fitsSyncItemQuota(STORAGE_KEY, authoritativeList) || fitsSyncItemQuota(STORAGE_STATE_KEY, authoritative);
-
-  if (hasPinsStateData(authoritative) && (localCompactChanged || (syncCompactChanged && compactFitsSync))) {
-    await writePinsSnapshot(authoritative, { notifySyncError: false });
-  }
-
-  if (hasPinsStateData(authoritative) && (localRawChanged || (syncRawChanged && legacyFitsSync))) {
-    await writeLegacyPinsSnapshot(authoritative);
-  }
-
+  const localAuthoritative = mergePinsStates([localState, localListState, localCompactState]);
+  const authoritative = syncHasData ? syncAuthoritative : localAuthoritative;
   return authoritative;
 }
 
@@ -580,7 +550,7 @@ export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
     updatedAt: now,
   };
 
-  await writePinsSnapshot(nextState, { notifySyncError: true });
+  await writePinsSnapshot(nextState);
 
   // 通知监听器
   notifyListeners(nextList);

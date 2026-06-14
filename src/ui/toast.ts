@@ -18,6 +18,7 @@ export function showToast(message: string, ms = 2400): void {
   el.style.fontSize = '12px';
   el.style.lineHeight = '1.4';
   el.style.boxShadow = '0 6px 16px rgba(0,0,0,0.22)';
+  el.style.pointerEvents = 'none';
 
   if (!existing) document.body.appendChild(el);
 
@@ -27,5 +28,4 @@ export function showToast(message: string, ms = 2400): void {
     toastTimer = null;
   }, ms);
 }
-
 

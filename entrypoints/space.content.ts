@@ -4,7 +4,6 @@ import { observeSpacePage } from '../src/ui/spaceFollowMenuPin';
 import { observeFollowTime } from '../src/ui/followTime';
 import { initApiInterceptor } from '../src/bili/apiInterceptor';
 import { installDebugBridge } from '../src/bili/debugBridge';
-import { installStorageWarningToast } from '../src/ui/storageWarning';
 
 export default defineContentScript({
   matches: ['https://space.bilibili.com/*'],
@@ -13,7 +12,6 @@ export default defineContentScript({
   world: 'MAIN',
   main() {
     injectStyleTag(contentStyles, 'bili-pin-space-style');
-    installStorageWarningToast();
     initApiInterceptor();
     installDebugBridge();
     // 观察页面变化注入菜单
@@ -30,4 +28,3 @@ export default defineContentScript({
     }
   },
 });
-
