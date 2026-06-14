@@ -8,6 +8,7 @@ import {
   PIN_BAR_HEIGHT_KEY,
   PIN_BAR_HEIGHT_STATE_KEY,
 } from '../storage/keys';
+import { normalizeFaceUrl } from '../utils/faceUrl';
 
 export const PIN_BAR_ID = 'bili-pin-pinbar';
 export const PIN_BAR_LIST_ID = 'bili-pin-pinbar-list';
@@ -454,7 +455,8 @@ export function renderPinBar(
     const img = document.createElement('img');
     img.className = 'bili-pin-bar__face';
     img.alt = up.name ?? up.mid;
-    if (up.face) img.src = up.face;
+    const face = normalizeFaceUrl(up.face);
+    if (face) img.src = face;
 
     const name = document.createElement('div');
     name.className = 'bili-pin-bar__name';

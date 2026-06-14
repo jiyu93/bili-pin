@@ -2,6 +2,7 @@
 
 import { observeStorageChanges, readStorageValue, writeMirroredConfig, writeStorageValue } from './config';
 import { PINS_KEY as STORAGE_KEY, PINS_STATE_KEY as STORAGE_STATE_KEY } from './keys';
+import { normalizeFaceUrl } from '../utils/faceUrl';
 
 export type PinnedUp = {
   mid: string;
@@ -28,7 +29,7 @@ function serializeList(value: unknown): string {
 }
 
 function normalizeItem(item: any): PinnedUp | null {
-  const face = String(item.face ?? '').trim() || undefined;
+  const face = normalizeFaceUrl(item.face);
   // 兼容读取：历史字段可能叫 uid；新字段为 mid
   const baseMid = String(item.mid ?? item.uid ?? '').trim();
 
@@ -358,7 +359,7 @@ export async function isPinned(mid: string): Promise<boolean> {
 export async function pinUp(
   input: Omit<PinnedUp, 'pinnedAt'> & { pinnedAt?: number },
 ): Promise<PinnedUp[]> {
-  const face = String(input.face ?? '').trim() || undefined;
+  const face = normalizeFaceUrl(input.face);
   const inputMid = String((input as any).mid ?? (input as any).uid ?? '').trim();
   
   // 只接受 mid（数字字符串）

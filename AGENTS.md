@@ -152,7 +152,7 @@
 
 ## 6. 当前状态
 
-**当前版本：`v1.2.0`**，版本号来自 `package.json`，manifest 版本由 `wxt.config.ts` 自动读取。
+**当前版本：`v1.2.1`**，版本号来自 `package.json`，manifest 版本由 `wxt.config.ts` 自动读取。
 
 ### 当前实现状态
 
@@ -161,7 +161,9 @@
 - API 拦截范围已收窄到项目依赖接口，缓存有上限；fetch 真实网络错误保持页面原语义，XHR 使用 `loadend` 旁路读取响应。
 - 主要长期运行风险已做过收敛：推荐横条刷新合并到帧、动态三点菜单短重试、关注时间列表级观察、视频 popover observer 清理、资料卡 body 直接子节点观察。
 
-### 最近维护记录（不改版本号）
+### 最近维护记录
+
+- `2026-06-14`：修复动态页置顶栏头像可能因历史 `http://*.hdslb.com/bfs/face/` 地址触发 Mixed Content 自动升级或加载异常而不展示的问题。新增头像 URL 规范化工具，storage 入库、API 缓存、推荐栏提取和置顶栏渲染统一把 B 站头像地址收敛为 HTTPS，并补齐置顶栏昵称行数 CSS 默认值。本次为运行时 bugfix，版本提升至 `v1.2.1`。涉及文件：`src/utils/faceUrl.ts`、`src/storage/pins.ts`、`src/bili/apiInterceptor.ts`、`src/ui/injectPinButtons.ts`、`src/ui/pinBar.ts`、`src/styles/content.css`、`package.json`、`package-lock.json`、`AGENTS.md`。验证：`npm run typecheck`、`npm run build` 通过；`.output/chrome-mv3/manifest.json` 的 `version` 与 `package.json` 一致为 `1.2.1`。
 
 - `2026-05-18`：按 commit skill 标准做项目级收尾检查，不只检查未提交 diff；全仓库扫描旧口径、临时残留、调试残留和版本一致性后，将内部动态页 mid 相关命名从早期 `uid` 收敛为 `mid`，并移除 `filterFeedDirectly` 不再使用的 name/face 参数。保留 B 站接口响应中的 `mid ?? uid` 兼容读取，不改变存储 schema、用户数据或运行行为。本次为内部命名与维护性收口，不提升版本号。涉及文件：`src/bili/selectors.ts`、`src/bili/clickBridge.ts`、`src/ui/injectPinButtons.ts`、`src/ui/pinBar.ts`、`AGENTS.md`。验证：`npm run typecheck`、`npm run build`、`git diff --check` 通过；`.output/chrome-mv3/manifest.json` 的 `version` 与 `package.json` 一致为 `1.2.0`。
 - `2026-05-18`：重写 `AGENTS.md` 为当前维护手册，压缩早期流水账式版本记录，明确工作方式、账号安全边界、架构不变量、性能约束、功能模块速查和验收路径；同步修正 `README.md`、`docs/prd.md`、`docs/roadmap.md` 中关于搜索页、动态页 hover 用户资料卡和当前版本的旧口径。本次仅改文档，不修改运行时代码，不提升版本号。涉及文件：`AGENTS.md`、`README.md`、`docs/prd.md`、`docs/roadmap.md`。验证：人工核对入口文件、storage、API 拦截和主要 UI 模块；`git diff --check` 通过；未运行构建，因本次无代码变更。
@@ -170,6 +172,7 @@
 
 ### 最近发布摘要
 
+- `v1.2.1`：规范化 B 站头像 URL 为 HTTPS，修复置顶栏历史 `http://` 头像在动态页可能不展示的问题，并补齐昵称布局默认值。
 - `v1.2.0`：正式合并动态页 hover 用户资料卡置顶入口、搜索页用户结果置顶入口、搜索页 storage bridge 匹配、按钮禁用态清理、置顶按钮视觉收敛，以及页面快照 / Computer Use 开发流程文档。
 - `v1.1.7`：新增搜索页用户结果置顶入口，支持综合搜索和用户 Tab 的用户卡片。
 - `v1.1.6`：新增动态页头像/昵称 hover 用户资料卡置顶入口。

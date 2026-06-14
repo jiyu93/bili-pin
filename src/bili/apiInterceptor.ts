@@ -6,6 +6,7 @@
 
 import { extractFaceHash } from './faceKey';
 import { debugLog } from './debugFlag';
+import { normalizeFaceUrl } from '../utils/faceUrl';
 
 export interface UpInfo {
   mid: string;
@@ -101,7 +102,7 @@ function extractUpInfoFromUpListResponse(data: any): UpInfo[] {
     if (Array.isArray(items)) {
       for (const up of items) {
         const mid = up?.mid ?? up?.uid;
-        const face = up?.face ?? up?.avatar;
+        const face = normalizeFaceUrl(up?.face ?? up?.avatar);
         const name = up?.name ?? up?.uname ?? up?.title ?? '';
         const hasUpdate = !!(up?.has_update ?? 0);
         if (mid && face) {
@@ -128,7 +129,7 @@ function extractUpInfoFromPortalResponse(data: any): UpInfo[] {
     if (Array.isArray(items)) {
       for (const up of items) {
         const mid = up?.mid ?? up?.uid;
-        const face = up?.face ?? up?.avatar;
+        const face = normalizeFaceUrl(up?.face ?? up?.avatar);
         const name = up?.name ?? up?.uname ?? up?.title ?? '';
         const hasUpdate = !!(up?.has_update ?? 0);
         if (mid && face) {
@@ -154,7 +155,7 @@ function extractUpInfoFromRelationResponse(data: any): UpInfo[] {
     if (Array.isArray(list)) {
       for (const up of list) {
         const mid = up?.mid ?? up?.uid;
-        const face = up?.face ?? up?.avatar;
+        const face = normalizeFaceUrl(up?.face ?? up?.avatar);
         const name = up?.uname ?? up?.name ?? '';
         const mtime = up?.mtime;
         if (mid && face) {
@@ -183,7 +184,7 @@ function extractUpInfoFromFeedResponse(data: any): UpInfo[] {
     const pickFromAuthorModule = (obj: any): UpInfo | null => {
       const mod = obj?.modules?.module_author ?? obj?.modules?.moduleAuthor ?? null;
       const mid = mod?.mid ?? mod?.uid ?? null;
-      const face = mod?.face ?? mod?.avatar ?? null;
+      const face = normalizeFaceUrl(mod?.face ?? mod?.avatar);
       const name = mod?.name ?? mod?.uname ?? mod?.title ?? '';
       if (!mid || !face) return null;
       return { mid: String(mid), face: String(face), name: String(name ?? '') };
@@ -192,7 +193,7 @@ function extractUpInfoFromFeedResponse(data: any): UpInfo[] {
     const pickFromUserProfile = (obj: any): UpInfo | null => {
       const info = obj?.desc?.user_profile?.info ?? obj?.user_profile?.info ?? null;
       const mid = info?.mid ?? info?.uid ?? null;
-      const face = info?.face ?? info?.avatar ?? null;
+      const face = normalizeFaceUrl(info?.face ?? info?.avatar);
       const name = info?.uname ?? info?.name ?? '';
       if (!mid || !face) return null;
       return { mid: String(mid), face: String(face), name: String(name ?? '') };

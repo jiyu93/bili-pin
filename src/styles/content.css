@@ -248,11 +248,11 @@ html[data-bili-pin-filtered-mid] .bili-dyn-list-tabs {
   text-align: center;
   transition: color 200ms ease;
   display: -webkit-box;
-  line-clamp: var(--bili-pin-name-lines);
-  -webkit-line-clamp: var(--bili-pin-name-lines);
+  line-clamp: var(--bili-pin-name-lines, 2);
+  -webkit-line-clamp: var(--bili-pin-name-lines, 2);
   -webkit-box-orient: vertical;
   /* 强制固定高度，避免因单行/双行文字混排导致 Grid 行高抖动 */
-  height: var(--bili-pin-name-max-height);
+  height: var(--bili-pin-name-max-height, calc(var(--bili-pin-name-line-height) * 2));
 }
 
 /* 高亮状态：选中时的蓝色圆框和蓝色文字 */

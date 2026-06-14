@@ -4,6 +4,7 @@ import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveMid } from './p
 import { showToast } from './toast';
 import { getDesiredHostMid, getUpInfoByFace, getUpInfoByName, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
 import { forceReloadAllFeed } from '../bili/feedSwitch';
+import { normalizeFaceUrl } from '../utils/faceUrl';
 
 const BTN_CLASS = 'bili-pin-btn';
 const BTN_MARK = 'data-bili-pin-btn';
@@ -28,14 +29,14 @@ function ensurePinBtnContent(btn: HTMLButtonElement) {
 
 function extractNameAndFace(a: HTMLAnchorElement): Pick<PinnedUp, 'name' | 'face'> {
   const img = a.querySelector<HTMLImageElement>('img');
-  const face = img?.currentSrc || img?.src || undefined;
+  const face = normalizeFaceUrl(img?.currentSrc || img?.src);
   const name = (img?.alt || a.textContent || '').trim() || undefined;
   return { name, face };
 }
 
 function extractNameAndFaceFromItem(item: HTMLElement): Pick<PinnedUp, 'name' | 'face'> {
   const img = item.querySelector<HTMLImageElement>('img');
-  const face = img?.currentSrc || img?.src || undefined;
+  const face = normalizeFaceUrl(img?.currentSrc || img?.src);
   const nameEl = item.querySelector<HTMLElement>('.bili-dyn-up-list__item__name');
   const name = (nameEl?.textContent || img?.alt || '').trim() || undefined;
   return { name, face };
@@ -325,10 +326,10 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
     const info = getUpInfoByMid(p.mid);
     if (!info) return p;
     const name = (info.name || '').trim() || undefined;
-    const face = (info.face || '').trim() || undefined;
+    const face = normalizeFaceUrl(info.face);
 
     // face 的合并策略要更保守：只有在“原本没有 face 或明显不是头像 URL”时才覆盖，避免引入回归。
-    const currentFace = (p.face || '').trim() || undefined;
+    const currentFace = normalizeFaceUrl(p.face);
     const isLikelyFaceUrl = (u?: string) => !!u && /\/bfs\/face\//.test(u);
 
     const next: PinnedUp = {
@@ -336,7 +337,7 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
       // 昵称以 portal 为准（更可靠）
       name: name ?? p.name,
       // 头像只在必要时回填
-      face: currentFace ? currentFace : (isLikelyFaceUrl(face) ? face : undefined) ?? p.face,
+      face: currentFace ? currentFace : (isLikelyFaceUrl(face) ? face : undefined) ?? normalizeFaceUrl(p.face),
     };
     if (next.name !== p.name || next.face !== p.face) needWriteBack = true;
     return next;
