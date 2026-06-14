@@ -44,7 +44,7 @@
 ### 2.3 架构不变量
 
 - `MAIN` world 业务代码不能直接依赖 `chrome.storage`。存储读写统一走 `src/storage/config.ts`；`config.ts` 在当前 world 暴露 `chrome.storage` 时可直接使用，否则必须通过 `src/utils/bridgeClient.ts` 访问 `entrypoints/storageBridge.content.ts`。
-- `chrome.storage.sync` 是跨设备配置的权威存储，`chrome.storage.local` 只作为同机镜像和升级回退。升级迁移必须先读旧 local，再写 sync，禁止用空 sync 覆盖已有 local 数据。
+- `chrome.storage.sync` 是跨设备配置的主存储，`chrome.storage.local` 是同机镜像、升级回退和 sync 配额失败时的本机最新状态兜底。升级迁移必须同时读取 sync/local 的新旧状态并按时间戳合并，禁止用空 sync 或较旧 sync 覆盖已有 local 数据。
 - 持久化 UP 唯一标识只能使用真实数字字符串 `mid`。头像 hash、昵称、DOM 位置只能用于辅助反查，不能作为持久化主键。
 - API 拦截只允许处理项目真正依赖的 B 站接口：`portal`、`uplist`、`feed`、`relation/followings`、`relation/fans`、`relation/tag`。不要扩大到全站 API 解析。
 - 样式通过 JS 动态插入 `<style>` 标签，不在 manifest 里声明内容脚本 CSS，避免影响 Dark Reader 等插件。
@@ -157,13 +157,13 @@
 ### 当前实现状态
 
 - 动态页置顶栏、推荐横条按钮、动态卡片三点菜单、动态页 hover 用户资料卡、搜索用户结果、空间页/视频页关注菜单、关注时间显示和扩展弹窗均已实现。
-- 存储模型已收敛为 `chrome.storage.sync` 权威 + `chrome.storage.local` 镜像；置顶列表使用 v2 状态结构，包含排序、更新时间和删除墓碑。
+- 存储模型已收敛为 `chrome.storage.sync` 主存储 + `chrome.storage.local` 镜像；置顶列表优先使用 v3 压缩状态，保留 v2/v1 兼容读取与容量内回写，包含排序、更新时间和删除墓碑。
 - API 拦截范围已收窄到项目依赖接口，缓存有上限；fetch 真实网络错误保持页面原语义，XHR 使用 `loadend` 旁路读取响应。
 - 主要长期运行风险已做过收敛：推荐横条刷新合并到帧、动态三点菜单短重试、关注时间列表级观察、视频 popover observer 清理、资料卡 body 直接子节点观察。
 
 ### 最近维护记录
 
-- `2026-06-14`：修复动态页置顶栏头像可能因历史 `http://*.hdslb.com/bfs/face/` 地址触发 Mixed Content 自动升级或加载异常而不展示的问题。新增头像 URL 规范化工具，storage 入库、API 缓存、推荐栏提取和置顶栏渲染统一把 B 站头像地址收敛为 HTTPS，并补齐置顶栏昵称行数 CSS 默认值。本次为运行时 bugfix，版本提升至 `v1.2.1`。涉及文件：`src/utils/faceUrl.ts`、`src/storage/pins.ts`、`src/bili/apiInterceptor.ts`、`src/ui/injectPinButtons.ts`、`src/ui/pinBar.ts`、`src/styles/content.css`、`package.json`、`package-lock.json`、`AGENTS.md`。验证：`npm run typecheck`、`npm run build` 通过；`.output/chrome-mv3/manifest.json` 的 `version` 与 `package.json` 一致为 `1.2.1`。
+- `2026-06-14`：修复动态页置顶栏头像可能因历史 `http://*.hdslb.com/bfs/face/` 地址触发 Mixed Content 自动升级或加载异常而不展示的问题，并修复置顶数量约 50 个后 `chrome.storage.sync` 单 key 超限导致无法继续保存的问题。新增头像 URL 规范化与压缩工具；置顶数据新增 v3 单 key 压缩状态，使用短数组、相对时间戳和 B 站头像短引用降低 sync 体积；读取时合并 sync/local 的 v3、v2、v1，避免多设备延迟升级时用旧短列表误删新数据；v2/v1 仅在容量内继续回写兼容；主同步写满时通过页面 toast 提示用户本机已保存但可能无法同步。本次仍归入 `v1.2.1` 运行时 bugfix，不重复提升版本号。涉及文件：`src/utils/faceUrl.ts`、`src/storage/pins.ts`、`src/storage/config.ts`、`src/storage/keys.ts`、`src/ui/storageWarning.ts`、`entrypoints/content.ts`、`entrypoints/search.content.ts`、`entrypoints/space.content.ts`、`entrypoints/video.content.ts`、`public/popup.js`、`src/bili/apiInterceptor.ts`、`src/ui/injectPinButtons.ts`、`src/ui/pinBar.ts`、`src/styles/content.css`、`README.md`、`docs/prd.md`、`docs/roadmap.md`、`package.json`、`package-lock.json`、`AGENTS.md`。验证：`npm run typecheck`、`npm run build` 通过；`.output/chrome-mv3/manifest.json` 的 `version` 与 `package.json` 一致为 `1.2.1`。
 
 - `2026-05-18`：按 commit skill 标准做项目级收尾检查，不只检查未提交 diff；全仓库扫描旧口径、临时残留、调试残留和版本一致性后，将内部动态页 mid 相关命名从早期 `uid` 收敛为 `mid`，并移除 `filterFeedDirectly` 不再使用的 name/face 参数。保留 B 站接口响应中的 `mid ?? uid` 兼容读取，不改变存储 schema、用户数据或运行行为。本次为内部命名与维护性收口，不提升版本号。涉及文件：`src/bili/selectors.ts`、`src/bili/clickBridge.ts`、`src/ui/injectPinButtons.ts`、`src/ui/pinBar.ts`、`AGENTS.md`。验证：`npm run typecheck`、`npm run build`、`git diff --check` 通过；`.output/chrome-mv3/manifest.json` 的 `version` 与 `package.json` 一致为 `1.2.0`。
 - `2026-05-18`：重写 `AGENTS.md` 为当前维护手册，压缩早期流水账式版本记录，明确工作方式、账号安全边界、架构不变量、性能约束、功能模块速查和验收路径；同步修正 `README.md`、`docs/prd.md`、`docs/roadmap.md` 中关于搜索页、动态页 hover 用户资料卡和当前版本的旧口径。本次仅改文档，不修改运行时代码，不提升版本号。涉及文件：`AGENTS.md`、`README.md`、`docs/prd.md`、`docs/roadmap.md`。验证：人工核对入口文件、storage、API 拦截和主要 UI 模块；`git diff --check` 通过；未运行构建，因本次无代码变更。
@@ -172,7 +172,7 @@
 
 ### 最近发布摘要
 
-- `v1.2.1`：规范化 B 站头像 URL 为 HTTPS，修复置顶栏历史 `http://` 头像在动态页可能不展示的问题，并补齐昵称布局默认值。
+- `v1.2.1`：规范化 B 站头像 URL 为 HTTPS，修复置顶栏历史 `http://` 头像在动态页可能不展示的问题；新增置顶列表 v3 压缩状态，修复约 50 个置顶后 sync 单 key 超限导致继续保存失败的问题，并在主同步写满时给出页面提示。
 - `v1.2.0`：正式合并动态页 hover 用户资料卡置顶入口、搜索页用户结果置顶入口、搜索页 storage bridge 匹配、按钮禁用态清理、置顶按钮视觉收敛，以及页面快照 / Computer Use 开发流程文档。
 - `v1.1.7`：新增搜索页用户结果置顶入口，支持综合搜索和用户 Tab 的用户卡片。
 - `v1.1.6`：新增动态页头像/昵称 hover 用户资料卡置顶入口。

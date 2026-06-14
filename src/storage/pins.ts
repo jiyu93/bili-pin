@@ -1,8 +1,12 @@
 // 注意：本项目的“UP 唯一标识”使用 B 站 mid（数字字符串）
 
 import { observeStorageChanges, readStorageValue, writeMirroredConfig, writeStorageValue } from './config';
-import { PINS_KEY as STORAGE_KEY, PINS_STATE_KEY as STORAGE_STATE_KEY } from './keys';
-import { normalizeFaceUrl } from '../utils/faceUrl';
+import {
+  PINS_KEY as STORAGE_KEY,
+  PINS_STATE_COMPACT_KEY as STORAGE_COMPACT_KEY,
+  PINS_STATE_KEY as STORAGE_STATE_KEY,
+} from './keys';
+import { compactFaceUrl, normalizeFaceUrl } from '../utils/faceUrl';
 
 export type PinnedUp = {
   mid: string;
@@ -23,6 +27,19 @@ type PinsState = {
   orderUpdatedAt: number;
   updatedAt: number;
 };
+
+type CompactPinnedUp = [mid: string, name?: string, face?: string, pinnedAtDelta?: number];
+type CompactRemoved = [mid: string, removedAtDelta: number];
+type CompactPinsState = [
+  version: 3,
+  baseTime: number,
+  items: CompactPinnedUp[],
+  removed: CompactRemoved[],
+  orderUpdatedAtDelta?: number,
+  updatedAtDelta?: number,
+];
+
+const SYNC_QUOTA_BYTES_PER_ITEM = 8192;
 
 function serializeList(value: unknown): string {
   return JSON.stringify(value ?? null);
@@ -103,6 +120,145 @@ function buildPinsStateFromList(list: PinnedUp[]): PinsState {
   };
 }
 
+function getJsonBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value ?? null)).length;
+}
+
+function getStorageItemBytes(key: string, value: unknown): number {
+  return new TextEncoder().encode(key).length + getJsonBytes(value);
+}
+
+function fitsSyncItemQuota(key: string, value: unknown): boolean {
+  return getStorageItemBytes(key, value) <= SYNC_QUOTA_BYTES_PER_ITEM;
+}
+
+function getCompactBaseTime(state: PinsState): number {
+  const timestamps = [
+    state.orderUpdatedAt,
+    state.updatedAt,
+    ...state.items.flatMap((item) => [item.pinnedAt, item.updatedAt]),
+    ...Object.values(state.removed),
+  ].filter((value) => Number.isFinite(value) && value > 0);
+  return timestamps.length ? Math.min(...timestamps) : 0;
+}
+
+function toCompactDelta(value: number, baseTime: number): number | undefined {
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  if (!Number.isFinite(baseTime) || baseTime <= 0) return Math.round(value);
+  return Math.max(0, Math.round(value - baseTime));
+}
+
+function fromCompactDelta(value: unknown, baseTime: number): number {
+  const delta = Number(value);
+  if (!Number.isFinite(delta) || delta < 0) return 0;
+  if (!Number.isFinite(baseTime) || baseTime <= 0) return Math.round(delta);
+  return Math.round(baseTime + delta);
+}
+
+function getOrderedSyncedItems(state: PinsState): SyncedPinnedUp[] {
+  const itemMap = getStateItemMap(state);
+  const ordered: SyncedPinnedUp[] = [];
+
+  for (const mid of state.order) {
+    const item = itemMap.get(mid);
+    if (!item) continue;
+    ordered.push(item);
+    itemMap.delete(mid);
+  }
+
+  const remaining = Array.from(itemMap.values()).sort((a, b) => {
+    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+    return b.pinnedAt - a.pinnedAt;
+  });
+  ordered.push(...remaining);
+  return ordered;
+}
+
+function compactPinsState(state: PinsState): CompactPinsState {
+  const baseTime = getCompactBaseTime(state);
+  const items = getOrderedSyncedItems(state).map((item): CompactPinnedUp => {
+    const row: CompactPinnedUp = [item.mid];
+    const name = String(item.name ?? '').trim();
+    const face = compactFaceUrl(item.face);
+    const pinnedAtDelta = toCompactDelta(item.pinnedAt, baseTime);
+
+    if (name || face || pinnedAtDelta != null) row.push(name);
+    if (face || pinnedAtDelta != null) row.push(face ?? '');
+    if (pinnedAtDelta != null) row.push(pinnedAtDelta);
+
+    return row;
+  });
+  const removed = Object.entries(state.removed)
+    .map(([mid, removedAt]): CompactRemoved | null => {
+      const delta = toCompactDelta(removedAt, baseTime);
+      return delta == null ? null : [mid, delta];
+    })
+    .filter(Boolean) as CompactRemoved[];
+  const orderUpdatedAtDelta = toCompactDelta(state.orderUpdatedAt, baseTime);
+  const updatedAtDelta = toCompactDelta(state.updatedAt, baseTime);
+
+  const compact: CompactPinsState = [3, baseTime, items, removed];
+  if (orderUpdatedAtDelta != null || updatedAtDelta != null) compact.push(orderUpdatedAtDelta ?? 0);
+  if (updatedAtDelta != null) compact.push(updatedAtDelta);
+  return compact;
+}
+
+function normalizeCompactPinsState(value: unknown): PinsState {
+  if (!Array.isArray(value) || value[0] !== 3) {
+    return buildPinsStateFromList([]);
+  }
+
+  const baseTime = Number(value[1]) || 0;
+  const rawItems = Array.isArray(value[2]) ? value[2] : [];
+  const rawRemoved = Array.isArray(value[3]) ? value[3] : [];
+  const orderUpdatedAt = fromCompactDelta(value[4], baseTime);
+  const updatedAtFromState = fromCompactDelta(value[5], baseTime);
+
+  const items: SyncedPinnedUp[] = [];
+  for (const rawItem of rawItems) {
+    if (!Array.isArray(rawItem)) continue;
+    const mid = String(rawItem[0] ?? '').trim();
+    if (!/^\d+$/.test(mid)) continue;
+
+    const pinnedAt = fromCompactDelta(rawItem[3], baseTime) || updatedAtFromState || baseTime || Date.now();
+    const updatedAt = Math.max(pinnedAt, updatedAtFromState || 0);
+    items.push({
+      mid,
+      name: String(rawItem[1] ?? '').trim() || undefined,
+      face: normalizeFaceUrl(rawItem[2]),
+      pinnedAt,
+      updatedAt,
+    });
+  }
+
+  const removed: Record<string, number> = {};
+  for (const rawEntry of rawRemoved) {
+    if (!Array.isArray(rawEntry)) continue;
+    const mid = String(rawEntry[0] ?? '').trim();
+    const removedAt = fromCompactDelta(rawEntry[1], baseTime);
+    if (!/^\d+$/.test(mid) || removedAt <= 0) continue;
+    removed[mid] = removedAt;
+  }
+
+  const uniqItems = uniqByUid(items).map((item) => ({
+    ...item,
+    updatedAt: Number((item as any).updatedAt ?? item.pinnedAt ?? 0) || item.pinnedAt || Date.now(),
+  }));
+  const order = uniqItems.map((item) => item.mid);
+  const updatedAt =
+    updatedAtFromState ||
+    Math.max(orderUpdatedAt, ...uniqItems.map((item) => item.updatedAt), ...Object.values(removed), 0);
+
+  return {
+    version: 2,
+    items: uniqItems,
+    removed,
+    order,
+    orderUpdatedAt,
+    updatedAt,
+  };
+}
+
 function normalizePinsState(value: unknown): PinsState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return buildPinsStateFromList([]);
@@ -172,36 +328,103 @@ function derivePinnedUpsFromState(state: PinsState): PinnedUp[] {
   return ordered;
 }
 
-function serializePinsState(state: PinsState): string {
-  return JSON.stringify({
+function serializeCompactPinsState(state: PinsState): string {
+  return JSON.stringify(compactPinsState(state));
+}
+
+function mergePinsStates(states: PinsState[]): PinsState {
+  const candidates = states
+    .filter((state) => hasPinsStateData(state))
+    .slice()
+    .sort((a, b) => a.updatedAt - b.updatedAt);
+  if (!candidates.length) return buildPinsStateFromList([]);
+
+  const itemMap = new Map<string, SyncedPinnedUp>();
+  const removed: Record<string, number> = {};
+  let order: string[] = [];
+  let orderUpdatedAt = 0;
+  let updatedAt = 0;
+
+  for (const state of candidates) {
+    updatedAt = Math.max(updatedAt, state.updatedAt, state.orderUpdatedAt);
+
+    for (const [mid, removedAt] of Object.entries(state.removed)) {
+      if (!/^\d+$/.test(mid) || removedAt <= 0) continue;
+      const existing = itemMap.get(mid);
+      if (!existing || removedAt > existing.updatedAt) {
+        itemMap.delete(mid);
+        removed[mid] = Math.max(removed[mid] ?? 0, removedAt);
+        updatedAt = Math.max(updatedAt, removedAt);
+      }
+    }
+
+    for (const item of state.items) {
+      const removedAt = removed[item.mid] ?? 0;
+      if (removedAt > item.updatedAt) continue;
+
+      const existing = itemMap.get(item.mid);
+      if (!existing || item.updatedAt >= existing.updatedAt) {
+        itemMap.set(item.mid, item);
+        if (item.updatedAt > removedAt) delete removed[item.mid];
+        updatedAt = Math.max(updatedAt, item.updatedAt, item.pinnedAt);
+      }
+    }
+
+    if (state.orderUpdatedAt >= orderUpdatedAt && state.order.length > 0) {
+      order = state.order.slice();
+      orderUpdatedAt = state.orderUpdatedAt;
+    }
+  }
+
+  const itemMidSet = new Set(itemMap.keys());
+  const finalOrder = order.filter((mid, index, arr) => itemMidSet.has(mid) && arr.indexOf(mid) === index);
+  const orderedSet = new Set(finalOrder);
+  const remaining = Array.from(itemMap.values())
+    .filter((item) => !orderedSet.has(item.mid))
+    .sort((a, b) => {
+      if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+      return b.pinnedAt - a.pinnedAt;
+    });
+  finalOrder.push(...remaining.map((item) => item.mid));
+
+  return {
     version: 2,
-    items: state.items
-      .slice()
-      .sort((a, b) => a.mid.localeCompare(b.mid))
-      .map((item) => ({
-        mid: item.mid,
-        name: item.name,
-        face: item.face,
-        pinnedAt: item.pinnedAt,
-        updatedAt: item.updatedAt,
-      })),
-    removed: Object.fromEntries(Object.entries(state.removed).sort(([a], [b]) => a.localeCompare(b))),
-    order: state.order,
-    orderUpdatedAt: state.orderUpdatedAt,
-    updatedAt: state.updatedAt,
+    items: Array.from(itemMap.values()),
+    removed,
+    order: finalOrder,
+    orderUpdatedAt,
+    updatedAt,
+  };
+}
+
+async function writeLegacyPinsSnapshot(state: PinsState): Promise<void> {
+  const list = derivePinnedUpsFromState(state);
+  const writes: Promise<void>[] = [
+    writeStorageValue('local', STORAGE_STATE_KEY, state),
+    writeStorageValue('local', STORAGE_KEY, list),
+  ];
+
+  if (fitsSyncItemQuota(STORAGE_STATE_KEY, state)) {
+    writes.push(writeStorageValue('sync', STORAGE_STATE_KEY, state));
+  }
+
+  if (fitsSyncItemQuota(STORAGE_KEY, list)) {
+    writes.push(writeStorageValue('sync', STORAGE_KEY, list));
+  }
+
+  const results = await Promise.allSettled(writes);
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.warn('[bili-pin] failed to write legacy pins snapshot', result.reason);
+    }
+  }
+}
+
+async function writePinsSnapshot(state: PinsState, options: { notifySyncError?: boolean } = {}): Promise<void> {
+  await writeMirroredConfig(STORAGE_COMPACT_KEY, compactPinsState(state), {
+    notifySyncError: options.notifySyncError,
   });
-}
-
-async function writePinsSnapshot(state: PinsState): Promise<void> {
-  const list = derivePinnedUpsFromState(state);
-  await writeMirroredConfig(STORAGE_STATE_KEY, state);
-  await writeMirroredConfig(STORAGE_KEY, list);
-}
-
-async function writePinsSnapshotToArea(area: 'local' | 'sync', state: PinsState): Promise<void> {
-  const list = derivePinnedUpsFromState(state);
-  await writeStorageValue(area, STORAGE_STATE_KEY, state);
-  await writeStorageValue(area, STORAGE_KEY, list);
+  await writeLegacyPinsSnapshot(state);
 }
 
 function hasPinsStateData(state: PinsState): boolean {
@@ -209,7 +432,9 @@ function hasPinsStateData(state: PinsState): boolean {
 }
 
 async function getAuthoritativePinsState(): Promise<PinsState> {
-  const [syncStateEntry, localStateEntry, syncLegacyEntry, localLegacyEntry] = await Promise.all([
+  const [syncCompactEntry, localCompactEntry, syncStateEntry, localStateEntry, syncLegacyEntry, localLegacyEntry] = await Promise.all([
+    readStorageValue<CompactPinsState>('sync', STORAGE_COMPACT_KEY),
+    readStorageValue<CompactPinsState>('local', STORAGE_COMPACT_KEY),
     readStorageValue<PinsState>('sync', STORAGE_STATE_KEY),
     readStorageValue<PinsState>('local', STORAGE_STATE_KEY),
     readStorageValue<any[]>('sync', STORAGE_KEY),
@@ -222,25 +447,36 @@ async function getAuthoritativePinsState(): Promise<PinsState> {
   const localState = localStateEntry.found
     ? normalizePinsState(localStateEntry.value)
     : buildPinsStateFromList(normalizeList(localLegacyEntry.value));
-
-  const syncHasData = hasPinsStateData(syncState);
-  const localHasData = hasPinsStateData(localState);
-  const authoritative = syncHasData ? syncState : localState;
+  const syncCompactState = syncCompactEntry.found ? normalizeCompactPinsState(syncCompactEntry.value) : buildPinsStateFromList([]);
+  const localCompactState = localCompactEntry.found ? normalizeCompactPinsState(localCompactEntry.value) : buildPinsStateFromList([]);
+  const syncListState = buildPinsStateFromList(normalizeList(syncLegacyEntry.value));
+  const localListState = buildPinsStateFromList(normalizeList(localLegacyEntry.value));
+  const authoritative = mergePinsStates([
+    syncState,
+    localState,
+    syncListState,
+    localListState,
+    syncCompactState,
+    localCompactState,
+  ]);
   const authoritativeList = derivePinnedUpsFromState(authoritative);
+  const authoritativeCompact = compactPinsState(authoritative);
 
   const syncRawList = normalizeList(syncLegacyEntry.value);
   const localRawList = normalizeList(localLegacyEntry.value);
-  const syncStateChanged = serializePinsState(syncState) !== serializePinsState(authoritative);
-  const localStateChanged = serializePinsState(localState) !== serializePinsState(authoritative);
+  const syncCompactChanged = serializeCompactPinsState(syncCompactState) !== JSON.stringify(authoritativeCompact);
+  const localCompactChanged = serializeCompactPinsState(localCompactState) !== JSON.stringify(authoritativeCompact);
   const syncRawChanged = serializeList(syncRawList) !== serializeList(authoritativeList);
   const localRawChanged = serializeList(localRawList) !== serializeList(authoritativeList);
+  const compactFitsSync = fitsSyncItemQuota(STORAGE_COMPACT_KEY, authoritativeCompact);
+  const legacyFitsSync = fitsSyncItemQuota(STORAGE_KEY, authoritativeList) || fitsSyncItemQuota(STORAGE_STATE_KEY, authoritative);
 
-  if (!syncHasData && localHasData && (syncStateChanged || syncRawChanged)) {
-    await writePinsSnapshotToArea('sync', authoritative);
+  if (hasPinsStateData(authoritative) && (localCompactChanged || (syncCompactChanged && compactFitsSync))) {
+    await writePinsSnapshot(authoritative, { notifySyncError: false });
   }
 
-  if (syncHasData && (localStateChanged || localRawChanged)) {
-    await writePinsSnapshotToArea('local', authoritative);
+  if (hasPinsStateData(authoritative) && (localRawChanged || (syncRawChanged && legacyFitsSync))) {
+    await writeLegacyPinsSnapshot(authoritative);
   }
 
   return authoritative;
@@ -284,7 +520,7 @@ function ensureStorageObserver() {
   if (stopStorageObserver) return;
 
   let scheduled = false;
-  stopStorageObserver = observeStorageChanges([STORAGE_KEY, STORAGE_STATE_KEY], () => {
+  stopStorageObserver = observeStorageChanges([STORAGE_KEY, STORAGE_STATE_KEY, STORAGE_COMPACT_KEY], () => {
     if (scheduled) return;
     scheduled = true;
     queueMicrotask(async () => {
@@ -344,7 +580,7 @@ export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
     updatedAt: now,
   };
 
-  await writePinsSnapshot(nextState);
+  await writePinsSnapshot(nextState, { notifySyncError: true });
 
   // 通知监听器
   notifyListeners(nextList);

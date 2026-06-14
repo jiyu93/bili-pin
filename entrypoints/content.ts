@@ -6,6 +6,7 @@ import { installDebugBridge } from '../src/bili/debugBridge';
 import { initApiInterceptor } from '../src/bili/apiInterceptor';
 import { observeDynamicFeedMoreMenu } from '../src/ui/dynamicMoreMenuPin';
 import { observeDynamicUserProfilePin } from '../src/ui/dynamicUserProfilePin';
+import { installStorageWarningToast } from '../src/ui/storageWarning';
 
 export default defineContentScript({
   matches: ['https://t.bilibili.com/*'],
@@ -15,6 +16,7 @@ export default defineContentScript({
   main() {
     // 注入样式（inline模式）
     injectStyleTag(contentStyles, 'bili-pin-content-style');
+    installStorageWarningToast();
 
     // 尽早初始化API拦截器，在页面加载API请求之前
     initApiInterceptor();

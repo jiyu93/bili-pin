@@ -89,9 +89,9 @@
 
 ### 数据与同步
 - `src/storage/pins.ts`
-  - 管理置顶列表、排序、删除墓碑和响应式通知。
+  - 管理置顶列表、排序、删除墓碑、v3 压缩同步状态、旧状态兼容迁移和响应式通知。
 - `src/storage/config.ts`
-  - 管理 `sync` / `local` 双端读写、迁移、镜像写入和变更监听。
+  - 管理 `sync` / `local` 双端读写、迁移、镜像写入、同步容量提示和变更监听。
 - `src/storage/keys.ts`
   - 统一定义 storage key。
 - `src/utils/bridgeClient.ts`
@@ -99,7 +99,7 @@
 
 ## 当前实现方式
 - 纯前端实现，无后端服务。
-- 数据以 `chrome.storage.sync` 为主存储，并镜像写入 `chrome.storage.local` 作为同机回退与迁移兼容。
+- 数据以 `chrome.storage.sync` 为主存储，并镜像写入 `chrome.storage.local` 作为同机回退与迁移兼容；置顶列表优先使用压缩 v3 状态，并保留 v2/v1 兼容读取。
 - 动态页和空间页运行在 `MAIN` world，以便尽早拦截页面自身发起的 XHR / Fetch。
 - 搜索页运行在 `MAIN` world，但当前不拦截 API，只基于结果卡片中的 space 链接提取真实 `mid`。
 - 视频页也运行在 `MAIN` world，但当前主要依赖 `window.__INITIAL_STATE__` 和原生 DOM，不额外拦截 API。

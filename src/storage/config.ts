@@ -12,6 +12,12 @@ export type SyncMeta = {
   lastSyncWriteAt?: number;
 };
 
+export const STORAGE_SYNC_WARNING_EVENT = 'bili-pin:storage-sync-warning';
+
+type WriteMirroredConfigOptions = {
+  notifySyncError?: boolean;
+};
+
 function getChromeStorageArea(area: StorageAreaName) {
   return (globalThis as any).chrome?.storage?.[area];
 }
@@ -102,7 +108,34 @@ function toErrorMessage(error: unknown): string {
   return String(error);
 }
 
-export async function writeMirroredConfig<T>(key: string, value: T): Promise<void> {
+function isQuotaErrorMessage(message: string): boolean {
+  return /quota|max_write|exceed|bytes per item|QUOTA_BYTES/i.test(message);
+}
+
+let lastSyncWarningAt = 0;
+
+function notifySyncWarning(key: string, message: string): void {
+  if (!isQuotaErrorMessage(message)) return;
+  const now = Date.now();
+  if (now - lastSyncWarningAt < 5000) return;
+  lastSyncWarningAt = now;
+
+  try {
+    globalThis.dispatchEvent(
+      new CustomEvent(STORAGE_SYNC_WARNING_EVENT, {
+        detail: { key, message },
+      }),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export async function writeMirroredConfig<T>(
+  key: string,
+  value: T,
+  options: WriteMirroredConfigOptions = {},
+): Promise<void> {
   const errors: unknown[] = [];
   let syncWriteAt = 0;
 
@@ -117,8 +150,12 @@ export async function writeMirroredConfig<T>(key: string, value: T): Promise<voi
     await writeStorageValue('sync', key, value);
     syncWriteAt = Date.now();
   } catch (error) {
+    const message = toErrorMessage(error);
     errors.push(error);
-    console.warn('[bili-pin] failed to write sync config', { key, error: toErrorMessage(error) });
+    console.warn('[bili-pin] failed to write sync config', { key, error: message });
+    if (options.notifySyncError !== false) {
+      notifySyncWarning(key, message);
+    }
   }
 
   if (syncWriteAt > 0 && key !== SYNC_META_KEY) {

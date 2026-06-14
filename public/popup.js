@@ -2,6 +2,7 @@
 const STORAGE_KEYS = {
   pins: 'biliPin.pins.v1',
   pinsState: 'biliPin.pins.state.v2',
+  pinsCompactState: 'biliPin.pins.state.v3',
   pinBarExpandedState: 'biliPin.ui.pinBarExpanded.state.v2',
   syncMeta: 'biliPin.syncMeta.v1',
 };
@@ -36,13 +37,19 @@ function formatDateTime(value) {
 }
 
 function getPinsCount(snapshot) {
+  const compactItems = snapshot[STORAGE_KEYS.pinsCompactState]?.[2];
+  if (Array.isArray(compactItems)) return compactItems.length;
   return Array.isArray(snapshot[STORAGE_KEYS.pins]) ? snapshot[STORAGE_KEYS.pins].length : 0;
 }
 
 function getLatestUpdatedAt(snapshot) {
+  const compactState = snapshot[STORAGE_KEYS.pinsCompactState];
+  const compactBase = Number(compactState?.[1] ?? 0) || 0;
+  const compactUpdatedAtDelta = Number(compactState?.[5] ?? 0) || 0;
+  const compactUpdatedAt = compactBase > 0 ? compactBase + compactUpdatedAtDelta : compactUpdatedAtDelta;
   const pinsUpdatedAt = Number(snapshot[STORAGE_KEYS.pinsState]?.updatedAt ?? 0) || 0;
   const expandedUpdatedAt = Number(snapshot[STORAGE_KEYS.pinBarExpandedState]?.updatedAt ?? 0) || 0;
-  return Math.max(pinsUpdatedAt, expandedUpdatedAt);
+  return Math.max(compactUpdatedAt, pinsUpdatedAt, expandedUpdatedAt);
 }
 
 function setValue(id, text) {

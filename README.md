@@ -25,7 +25,7 @@
   在个人空间“全部关注”列表中显示精确的关注时间，帮你回忆“入坑”时刻。
 
 - **🔒 隐私安全**
-  纯前端实现，无后端服务。配置以 `chrome.storage.sync` 为主存储，并镜像写入 `chrome.storage.local` 作为同机回退；升级时会自动把旧版本地配置迁移到同步存储，无需手动导出。
+  纯前端实现，无后端服务。配置以 `chrome.storage.sync` 为主存储，并镜像写入 `chrome.storage.local` 作为同机回退；置顶列表使用压缩同步状态并兼容旧数据迁移，无需手动导出。
 
 - **🧪 同步摘要**
   点击扩展工具栏图标，可快速查看头像数量和最后同步时间。
@@ -38,7 +38,7 @@
   - 视频页同样运行在 `MAIN` world，但当前不拦截 API，而是直接读取 `window.__INITIAL_STATE__` 和页面 DOM 来识别 UP 主。
 - **存储访问**
   - `entrypoints/storageBridge.content.ts` 运行在 `ISOLATED` world，为 `MAIN` world 提供 `chrome.storage.local/sync` 代理。
-  - 置顶列表与 UI 偏好通过 `storage.onChanged` 主动回灌，已打开页面也会响应远端同步变化。
+  - 置顶列表以压缩状态同步，保留旧版本状态兼容读取；UI 偏好通过 `storage.onChanged` 主动回灌，已打开页面也会响应远端同步变化。
 - **样式注入**
   - 扩展样式通过 JS 动态插入 `<style>` 标签，而不是在 manifest 里声明内容脚本 CSS，以减少对 Dark Reader 等插件的干扰。
 
