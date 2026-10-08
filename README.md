@@ -91,6 +91,6 @@ npm run zip
 
 ## 📚 项目文档
 
-- **`AGENTS.md`** — **AI / 贡献者必读**：核心架构、开发规范、内存泄漏防护、功能模块速查、验收清单。
-- [`docs/prd.md`](docs/prd.md) — 项目简介、背景与当前结构说明。
+- [`AGENTS.md`](AGENTS.md) — **AI / 贡献者必读**：维护规范、模块索引、内置浏览器调试与验证流程。
+- [`docs/prd.md`](docs/prd.md) — 产品目标、当前功能与数据行为。
 - [`docs/roadmap.md`](docs/roadmap.md) — 版本规划与未来计划。
