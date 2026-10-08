@@ -9,7 +9,7 @@ import { observeDynamicUserProfilePin } from '../src/ui/dynamicUserProfilePin';
 
 export default defineContentScript({
   matches: ['https://t.bilibili.com/*'],
-  runAt: 'document_start', // 改为document_start，以便尽早拦截API请求
+  runAt: 'document_start', // 尽早拦截API请求
   // 关键：在 MAIN world 运行，才能拦截页面自身发出的 fetch/xhr（隔离世界改 window.fetch 没用）
   world: 'MAIN',
   main() {
@@ -24,10 +24,6 @@ export default defineContentScript({
     // 动态页头像/昵称 hover 出现的用户资料卡里注入“置顶UP主/取消置顶”
     observeDynamicUserProfilePin();
 
-    observeUpAvatarStrip((stripRoot) => {
-      injectPinUi(stripRoot).catch((err) => {
-        console.warn('[bili-pin] inject failed', err);
-      });
-    });
+    observeUpAvatarStrip(injectPinUi);
   },
 });

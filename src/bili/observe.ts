@@ -1,62 +1,46 @@
-import { findUpAvatarStripRoot, getUpAvatarStripDiagnostics } from './selectors';
-import { debugLog, isDebugEnabled } from './debugFlag';
+import { findUpAvatarStripRoot } from './selectors';
 
-export type UpStripFoundHandler = (stripRoot: HTMLElement) => void;
+export type UpStripFoundHandler = (stripRoot: HTMLElement | null) => void;
 
-/**
- * 监听 SPA/异步渲染导致的DOM变化，尽可能在“关注UP推荐列表”出现时调用 handler。
- * handler 需要自行保证幂等（重复调用不应产生重复注入）。
- */
+/** 等待原生横条；出现后仅观察祖先的直接子节点，避免动态流/hover 触发全页扫描。 */
 export function observeUpAvatarStrip(handler: UpStripFoundHandler): () => void {
   let destroyed = false;
-  let scheduled = false;
-  let lastEl: HTMLElement | null = null;
-  let missCount = 0;
-  let loggedNotFound = false;
+  let frame: number | null = null;
+  let observedNodes: Node[] = [];
+  let waiting = false;
 
+  const observer = new MutationObserver(() => schedule());
   const run = () => {
-    scheduled = false;
+    frame = null;
     if (destroyed) return;
-
-    const el = findUpAvatarStripRoot();
-    if (!el) {
-      missCount += 1;
-      // 避免刷屏：连续多次找不到后，仅输出一次诊断信息
-      if (!loggedNotFound && missCount >= 12) {
-        loggedNotFound = true;
-        debugLog('[bili-pin] 关注UP推荐列表未定位到', getUpAvatarStripDiagnostics());
-        if (isDebugEnabled()) {
-          debugLog('[bili-pin] tip: you can run `window.__biliPin?.dump()` in console to re-print diagnostics');
-        }
-      }
-      return;
+    const strip = findUpAvatarStripRoot();
+    const nodes: Node[] = [];
+    // 根节点尚未出现时短暂观察中栏（或文档），以捕获异步创建的 section / 横条。
+    if (!strip) {
+      nodes.push(document.querySelector('main') ?? document.documentElement);
     }
-
-    // 只在首次找到或“根节点变更”时触发注入。
-    // 否则在 hover/tooltip 等频繁 DOM 变化时会反复重渲染，造成按钮闪烁。
-    if (el === lastEl) return;
-    lastEl = el;
-    handler(el);
+    for (let node: Node | null = strip?.parentElement ?? nodes[0]?.parentNode; node; node = node.parentNode) {
+      nodes.push(node);
+    }
+    const nextWaiting = !strip;
+    if (waiting !== nextWaiting || nodes.length !== observedNodes.length || nodes.some((node, i) => node !== observedNodes[i])) {
+      observer.disconnect();
+      nodes.forEach((node, i) => observer.observe(node, { childList: true, subtree: nextWaiting && i === 0 }));
+      observedNodes = nodes;
+      waiting = nextWaiting;
+    }
+    handler(strip);
   };
-
   const schedule = () => {
-    if (destroyed || scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(run);
+    if (!destroyed && frame === null) frame = requestAnimationFrame(run);
   };
 
   schedule();
-
-  const mo = new MutationObserver(schedule);
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-
-  // B站是 SPA，前进/后退可能会换内容
   window.addEventListener('popstate', schedule);
-
   return () => {
     destroyed = true;
-    mo.disconnect();
+    if (frame !== null) cancelAnimationFrame(frame);
+    observer.disconnect();
     window.removeEventListener('popstate', schedule);
   };
 }
-

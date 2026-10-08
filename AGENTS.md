@@ -48,7 +48,7 @@ Feed 切换保留两条路径：推荐横条内复用原生点击；横条外用
 
 | 功能 / 入口 | 核心文件 | 维护要点 |
 |---|---|---|
-| 动态页 / `entrypoints/content.ts` | `src/ui/{injectPinButtons,pinBar}.ts`；`src/bili/{selectors,observe,feedSwitch,clickBridge}.ts` | 置顶栏、排序、高度持久化和 Feed 两条路径；推荐横条优先 `.bili-dyn-up-list__window`，mid 来自 portal/uplist，缺失时禁用并等待缓存刷新。 |
+| 动态页 / `entrypoints/content.ts` | `src/ui/{injectPinButtons,pinBar}.ts`；`src/bili/{selectors,observe,feedSwitch,clickBridge}.ts` | 置顶栏、排序、高度持久化和 Feed 两条路径；推荐横条只接受 `main .bili-dyn-up-list > .bili-dyn-up-list__window`，加载时等待，不按空间链接猜容器；mid 来自 portal/uplist，缺失时禁用并等待缓存刷新。 |
 | 动态卡片菜单 / 同上 | `src/ui/dynamicMoreMenuPin.ts` | 只 hook 卡片 more 按钮，短重试；克隆原生菜单项继承 scoped 样式。 |
 | hover 资料卡 / 同上 | `src/ui/dynamicUserProfilePin.ts` | `.bili-user-profile` 挂在 body；从 space 链接取 mid，按节点生命周期清理 observer。 |
 | 搜索页 / `entrypoints/search.content.ts` | `src/ui/searchUserPin.ts` | 支持 `.b-user-video-card`、`.b-user-info-card`，按钮放 `.user-actions`；克隆时清理 disabled 和 `vui_button--disabled`。 |
@@ -69,10 +69,11 @@ Feed 切换保留两条路径：推荐横条内复用原生点击；横条外用
 
 ## 6. 当前状态与维护记录
 
-当前版本 **v1.2.1**（以 `package.json` 为准）。
+当前版本 **v1.2.2**（以 `package.json` 为准）。
 
 - PRD 所列功能均已实现；置顶数据使用 v3 压缩状态，兼容 v2/v1，sync 超限快速拒绝并提示；历史头像规范化为 HTTPS。
 - API 拦截范围与缓存已收敛，XHR 使用 `loadend` 旁路读取；推荐横条刷新、列表观察及 popover 生命周期已有清理机制，改动时保持这些约束。
 - `2026-10-08`：精简维护指南和 PRD，采用内置浏览器调试；用户通过管理界面加载/重载本地扩展，Agent 接手页面验证，修正把自动化接口限制等同于浏览器能力限制的结论。涉及 `AGENTS.md`、`docs/prd.md`、`README.md`、`docs/roadmap.md`。验证：`npm run build`、manifest 版本核对（1.2.1）、文档链接及 `git diff --check` 通过；用户加载后，确认动态页样式/置顶栏/图钉按钮/菜单 hook 及 API 拦截已注入，头像加载正常，MAIN → ISOLATED 存储桥可读取真实 sync/local v3 状态且镜像一致，未观察到扩展 warn/error。未修改运行时代码；未进行置顶写入、Feed 切换或跨设备同步回归。
+- `2026-10-08`：v1.2.2 修复动态页置顶栏偶发误插三栏 flex 并被挤窄；移除启发式定位，增加明确锚点等待、错位校正、SPA 清理及串行刷新，修复按钮解禁和节点复用后的 mid。涉及 `entrypoints/content.ts`、`src/bili/{selectors,observe}.ts`、`src/ui/{injectPinButtons,pinBar}.ts`、版本文件及 PRD/roadmap。验证：内置浏览器实时 DOM 确认中栏锚点；合成页面复现旧版栏间 108px 窄条，新版为中栏 640px，`npm run typecheck`、`npm run build`、manifest 版本核对（1.2.2）及 `git diff --check` 通过；延迟加载、移除/重建、SPA 异步竞态、按钮身份及事件合并回归通过；使用临时存储/API 替身，未改账号置顶。用户重载后确认新版实例、置顶栏/推荐横条等宽（724px）、头像及按钮正常，无扩展 warn/error；临时错位后自动恢复且保留排序实例。未测试跨设备同步或账号写入。
 
 后续维护：大功能升 minor，小功能/bugfix 升 patch；同批未发版返工不重复升版，纯文档/注释/流程不升版。升版同步 `package.json`、`package-lock.json` 及本章，构建后核对 manifest 版本。每次可验收改动在本章记录日期、改动、文件及验证，保持简短；产品行为变化更新 PRD，版本历史与计划更新 roadmap。

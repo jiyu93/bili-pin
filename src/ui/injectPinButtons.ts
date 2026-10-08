@@ -1,6 +1,6 @@
 import { filterFeedDirectly } from '../bili/clickBridge';
 import { getPinnedUps, pinUp, setPinnedUps, unpinUp, onPinsChange, type PinnedUp } from '../storage/pins';
-import { ensurePinBar, ensurePinBarPrefs, renderPinBar, setActiveMid } from './pinBar';
+import { ensurePinBar, ensurePinBarPrefs, renderPinBar, removePinBar, setActiveMid } from './pinBar';
 import { showToast } from './toast';
 import { getDesiredHostMid, getUpInfoByFace, getUpInfoByName, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
 import { forceReloadAllFeed } from '../bili/feedSwitch';
@@ -8,7 +8,6 @@ import { normalizeFaceUrl } from '../utils/faceUrl';
 
 const BTN_CLASS = 'bili-pin-btn';
 const BTN_MARK = 'data-bili-pin-btn';
-const HOST_MARK = 'data-bili-pin-host';
 
 function ensurePinBtnContent(btn: HTMLButtonElement) {
   // 用 inline SVG：无需额外图片资源，颜色可由 CSS 控制
@@ -25,13 +24,6 @@ function ensurePinBtnContent(btn: HTMLButtonElement) {
       <path d="M15.113 3.21l.094 .083l5.5 5.5a1 1 0 0 1 -1.175 1.59l-3.172 3.171l-1.424 3.797a1 1 0 0 1 -.158 .277l-.07 .08l-1.5 1.5a1 1 0 0 1 -1.32 .082l-.095 -.083l-2.793 -2.792l-3.793 3.792a1 1 0 0 1 -1.497 -1.32l.083 -.094l3.792 -3.793l-2.792 -2.793a1 1 0 0 1 -.083 -1.32l.083 -.094l1.5 -1.5a1 1 0 0 1 .258 -.187l.098 -.042l3.796 -1.425l3.171 -3.17a1 1 0 0 1 1.497 -1.26z" fill="currentColor"/>
     </svg>
   `.trim();
-}
-
-function extractNameAndFace(a: HTMLAnchorElement): Pick<PinnedUp, 'name' | 'face'> {
-  const img = a.querySelector<HTMLImageElement>('img');
-  const face = normalizeFaceUrl(img?.currentSrc || img?.src);
-  const name = (img?.alt || a.textContent || '').trim() || undefined;
-  return { name, face };
 }
 
 function extractNameAndFaceFromItem(item: HTMLElement): Pick<PinnedUp, 'name' | 'face'> {
@@ -142,97 +134,53 @@ function renderButtons(stripRoot: HTMLElement, pinnedSet: Set<string>) {
   const items = findUpItems(stripRoot);
 
   for (const item of items) {
-    let mid = getItemMid(item);
-    
-    // 按“头像圆形容器”定位按钮：与B站原生推荐栏对齐（右上角）
-    const faceHost =
-      item.querySelector<HTMLElement>('.bili-dyn-up-list__item__face') ??
-      item.querySelector<HTMLElement>('.bili-dyn-up-list__item__face__img') ??
-      null;
-    const host = faceHost ?? item;
-
-    // 标记host避免重复注入
-    if (host.getAttribute(HOST_MARK) === '1') {
-      const existed = host.querySelector<HTMLButtonElement>(`button[${BTN_MARK}="1"]`);
-      if (existed) {
-        // 如果之前没有 mid，现在尝试重新获取
-        if (!mid) {
-          mid = getItemMid(item);
-        }
-        if (mid) {
-          existed.dataset.mid = mid;
-          setBtnState(existed, pinnedSet.has(mid));
-        }
-      }
-      continue;
+    const mid = getItemMid(item);
+    const host = item.querySelector<HTMLElement>('.bili-dyn-up-list__item__face') ?? item;
+    let btn = host.querySelector<HTMLButtonElement>(`button[${BTN_MARK}="1"]`);
+    const isNew = !btn;
+    if (!btn) {
+      ensureHostPositioning(host);
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = BTN_CLASS;
+      btn.setAttribute(BTN_MARK, '1');
     }
 
-    host.setAttribute(HOST_MARK, '1');
-    ensureHostPositioning(host);
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = BTN_CLASS;
-    btn.setAttribute(BTN_MARK, '1');
-    
-    // 即使暂时获取不到 mid，也创建按钮（但会禁用）
-    if (mid) {
-      btn.dataset.mid = mid;
-      setBtnState(btn, pinnedSet.has(mid));
-    } else {
-      // 暂时没有 mid，创建按钮但禁用，并标记需要重试
-      btn.dataset.mid = '';
-      btn.dataset.retry = '1';
-      btn.disabled = true;
-      ensurePinBtnContent(btn);
+    // 每次渲染都绑定当前身份，处理异步缓存到达及原生节点复用。
+    btn.dataset.mid = mid ?? '';
+    btn.disabled = !mid;
+    setBtnState(btn, Boolean(mid && pinnedSet.has(mid)));
+    if (!mid) {
       btn.setAttribute('aria-label', '置顶（正在加载）');
       btn.title = '正在获取UP信息，请稍候...';
-      btn.style.opacity = '0.5';
     }
+    if (!isNew) continue;
 
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
 
-      // 如果按钮被禁用，先尝试重新获取 mid
-      if (btn.disabled || !mid) {
-        mid = getItemMid(item);
-        if (mid && /^\d+$/.test(mid)) {
-          btn.dataset.mid = mid;
-          btn.disabled = false;
-          btn.style.opacity = '';
-          btn.title = '';
-          btn.removeAttribute('data-retry');
-          setBtnState(btn, pinnedSet.has(mid));
-        } else {
-          showToast('正在获取UP信息，请稍候再试');
-          return;
-        }
+      const mid = btn.dataset.mid;
+      if (!mid || !/^\d+$/.test(mid)) {
+        showToast('正在获取UP信息，请稍候再试');
+        return;
       }
 
       const currentlyPinned = btn.dataset.pinned === '1';
-      if (currentlyPinned) {
-        await unpinUp(mid);
-      } else {
-        // 再次检查 mid 是否有效
-        if (!mid || !/^\d+$/.test(mid)) {
-          showToast('无法置顶：未获取到真实的UP ID。请等待页面加载完成后再试。');
-          console.warn('[bili-pin] cannot pin: no real mid', { mid });
-          return;
+      try {
+        if (currentlyPinned) {
+          await unpinUp(mid);
+        } else {
+          await pinUp({ mid, ...extractNameAndFaceFromItem(item) });
         }
-        
-        try {
-          const meta = extractNameAndFaceFromItem(item);
-          await pinUp({ mid, ...meta } as any);
-        } catch (error: any) {
-          showToast(error.message || '置顶失败，请重试');
-          console.error('[bili-pin] pin failed', error);
-          return;
-        }
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : '置顶操作失败，请重试');
+        console.warn('[bili-pin] pin action failed', error);
+        return;
       }
 
       // 同步UI（按钮 + 置顶栏）
-      await refreshPinUi(stripRoot);
+      queuePinUiRefresh();
     });
 
     host.appendChild(btn);
@@ -318,9 +266,9 @@ function installGlobalExitFilterListenersOnce(): void {
 
 async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
   const pinned = await getPinnedUps();
+  if (stripRoot !== activeStripRoot || !stripRoot.isConnected) return;
 
-  // 回填/修正昵称与头像：space 页置顶时可能缺 portal 缓存（或曾经抓错 DOM），导致 name/face 不准。
-  // 动态页 portal 有可靠的 {mid,name,face}，因此优先用它修正并写回 storage（一次性纠正历史脏数据）。
+  // API 缓存仅补全当前渲染，不自动改写持久化置顶数据。
   const enriched = pinned.map((p) => {
     const info = getUpInfoByMid(p.mid);
     if (!info) return p;
@@ -345,8 +293,10 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
   const pinnedSet = new Set(pinnedForRender.map((x) => x.mid));
 
   const bar = ensurePinBar(stripRoot);
+  if (!bar) return;
   syncPinBarSizingFromBili(stripRoot, bar);
   await ensurePinBarPrefs(bar);
+  if (stripRoot !== activeStripRoot || !stripRoot.isConnected || !bar.isConnected) return;
   renderPinBar(bar, pinnedForRender, {
     onClickMid: async (mid) => {
       // 设置高亮（在点击时立即显示反馈）
@@ -359,7 +309,7 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
     onUnpinMid: async (mid) => {
       try {
         await unpinUp(mid);
-        await refreshPinUi(stripRoot);
+        queuePinUiRefresh();
       } catch (err) {
         console.warn('[bili-pin] unpin failed', err);
       }
@@ -399,68 +349,75 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
 
 let activeObserver: MutationObserver | null = null;
 let activeStripRoot: HTMLElement | null = null;
-let refreshQueued = false;
+let refreshFrame: number | null = null;
+let refreshing = false;
+let refreshPending = false;
+let globalListenersInstalled = false;
 
-// 初始化全局单例监听（只运行一次）
-function initGlobalListenersOnce() {
-  if ((window as any)._biliPinGlobalInit) return;
-  (window as any)._biliPinGlobalInit = true;
-
-  // 1. 监听 portal/uplist 数据就绪事件
-  window.addEventListener('bili-pin:portal-up-list', () => {
-    if (activeStripRoot && document.contains(activeStripRoot)) {
-      refreshPinUi(activeStripRoot).catch(() => {});
-    }
-  });
-
-  // 2. 监听 storage 变更（pins 列表变化）
-  onPinsChange(() => {
-    if (activeStripRoot && document.contains(activeStripRoot)) {
-      refreshPinUi(activeStripRoot).catch(() => {});
+// 所有刷新串行执行，事件合并到一帧；旧节点的异步读取不能覆盖新页面。
+function queuePinUiRefresh(): void {
+  refreshPending = true;
+  if (refreshing || refreshFrame !== null) return;
+  refreshFrame = requestAnimationFrame(async () => {
+    refreshFrame = null;
+    const root = activeStripRoot;
+    refreshPending = false;
+    if (!root?.isConnected) return;
+    refreshing = true;
+    try {
+      await refreshPinUi(root);
+    } catch (error) {
+      console.warn('[bili-pin] refresh failed', error);
+    } finally {
+      refreshing = false;
+      if (refreshPending) queuePinUiRefresh();
     }
   });
 }
 
-export async function injectPinUi(stripRoot: HTMLElement): Promise<void> {
-  // 1. 初始化全局监听
+function initGlobalListenersOnce(): void {
+  if (globalListenersInstalled) return;
+  globalListenersInstalled = true;
+  window.addEventListener('bili-pin:portal-up-list', queuePinUiRefresh);
+  onPinsChange(queuePinUiRefresh);
+}
+
+function isNativeStripMutation(mutation: MutationRecord): boolean {
+  const target = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+  if (target?.closest(`.${BTN_CLASS}`)) return false;
+  if (mutation.type !== 'childList') return true;
+  const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
+  return nodes.some((node) => !(node instanceof Element && node.matches(`.${BTN_CLASS}`)));
+}
+
+export function injectPinUi(stripRoot: HTMLElement | null): void {
   initGlobalListenersOnce();
-
-  // 2. 清理旧的 Observer（如果有），避免内存泄漏
-  if (activeObserver) {
-    activeObserver.disconnect();
-    activeObserver = null;
+  if (stripRoot === activeStripRoot) {
+    // 同一个横条被移动、或栏被原生渲染移除时，也校正插入位置。
+    if (stripRoot) {
+      const previousBar = document.getElementById('bili-pin-pinbar');
+      const bar = ensurePinBar(stripRoot);
+      if (bar && bar !== previousBar) queuePinUiRefresh();
+    }
+    return;
   }
-
-  // 3. 更新当前活跃的 Root
+  activeObserver?.disconnect();
+  activeObserver = null;
   activeStripRoot = stripRoot;
-
-  // 4. 执行首次刷新
-  await refreshPinUi(stripRoot);
-
-  // 5. 设置新的 Observer
-  // 避免在这个 stripRoot 上重复设置（虽然逻辑上每次 inject 都是针对新 root，但防抖更安全）
-  if (!stripRoot.hasAttribute('data-bili-pin-mutation-observer')) {
-    stripRoot.setAttribute('data-bili-pin-mutation-observer', '1');
-    
-    activeObserver = new MutationObserver((mutations) => {
-      let shouldRefresh = false;
-      for (const m of mutations) {
-        if (m.type === 'childList') {
-          shouldRefresh = true;
-          break;
-        }
-      }
-      if (shouldRefresh) {
-        if (refreshQueued) return;
-        refreshQueued = true;
-        requestAnimationFrame(() => {
-          refreshQueued = false;
-          // 使用闭包捕获当前的 stripRoot 是安全的，因为 activeObserver 会在切换时被 disconnect
-          refreshPinUi(stripRoot).catch(() => {});
-        });
-      }
-    });
-    // B站动态加载是追加 .bili-dyn-up-list__item，通常在 stripRoot 的子孙节点中
-    activeObserver.observe(stripRoot, { childList: true, subtree: true });
+  if (!stripRoot) {
+    removePinBar();
+    return;
   }
+
+  activeObserver = new MutationObserver((mutations) => {
+    if (mutations.some(isNativeStripMutation)) queuePinUiRefresh();
+  });
+  activeObserver.observe(stripRoot, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['src'],
+  });
+  queuePinUiRefresh();
 }

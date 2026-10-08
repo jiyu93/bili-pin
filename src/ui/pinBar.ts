@@ -1,4 +1,5 @@
 import Sortable from 'sortablejs';
+import { getUpAvatarStripAnchor } from '../bili/selectors';
 import type { PinnedUp } from '../storage/pins';
 import { getUpUpdateStatus, markUpAsRead } from '../bili/apiInterceptor';
 import { readStorageValue, writeMirroredConfig, writeStorageValue } from '../storage/config';
@@ -34,6 +35,7 @@ type PinBarListWithPersistState = HTMLElement & {
   __biliPinPersistedHeight?: number;
   __biliPinPendingHeight?: number;
   __biliPinSavingHeight?: boolean;
+  __biliPinSortable?: Sortable;
 };
 
 export type PinBarHandlers = {
@@ -44,6 +46,18 @@ export type PinBarHandlers = {
 
 // 当前选中的UP mid（用于高亮显示）
 let currentActiveMid: string | null = null;
+let activeBar: HTMLElement | null = null;
+let disposeResizeHandle: (() => void) | null = null;
+
+export function removePinBar(): void {
+  disposeResizeHandle?.();
+  disposeResizeHandle = null;
+  const bar = activeBar ?? document.getElementById(PIN_BAR_ID);
+  activeBar = null;
+  const list = bar?.querySelector<PinBarListWithPersistState>(`#${PIN_BAR_LIST_ID}`);
+  list?.__biliPinSortable?.destroy();
+  bar?.remove();
+}
 
 async function storageGetBool(key: string, fallback: boolean): Promise<boolean> {
   const [syncStateEntry, localStateEntry, syncLegacyEntry, localLegacyEntry] = await Promise.all([
@@ -232,23 +246,31 @@ function queuePinBarHeightPersist(list: HTMLElement, height: number): void {
 
 export async function ensurePinBarPrefs(bar: HTMLElement): Promise<void> {
   if (bar.dataset.prefsLoaded === '1') return;
-  bar.dataset.prefsLoaded = '1';
   const list = bar.querySelector<HTMLElement>(`#${PIN_BAR_LIST_ID}`);
   if (!list) return;
 
   const height = await storageGetPinBarHeight();
   applyPinBarHeight(list, height);
   setPersistedPinBarHeight(list, height);
+  bar.dataset.prefsLoaded = '1';
   updatePinBarLayout(bar);
 }
 
-export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
+export function ensurePinBar(stripRoot: HTMLElement): HTMLElement | null {
+  const anchor = getUpAvatarStripAnchor(stripRoot);
+  if (!anchor) return null;
+  if (activeBar && !activeBar.isConnected) removePinBar();
   const existing = document.getElementById(PIN_BAR_ID);
-  if (existing) return existing;
+  if (existing) {
+    activeBar = existing;
+    if (existing.nextElementSibling !== anchor) anchor.before(existing);
+    return existing;
+  }
 
   const bar = document.createElement('div');
   bar.id = PIN_BAR_ID;
   bar.className = 'bili-pin-bar';
+  activeBar = bar;
 
   const header = document.createElement('div');
   header.className = 'bili-pin-bar__header';
@@ -286,16 +308,7 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement {
   bar.appendChild(resize);
   ensurePinBarResizeHandle(bar, list, resize);
 
-  // 插到“关注UP推荐列表”上方
-  // 注意：`.bili-dyn-up-list` 通常是 flex 容器，若把 bar 插在其内部会与关注UP推荐列表同一行分宽度
-  // 因此优先插在 `.bili-dyn-up-list` 外部的上一层，保证独占一行
-  const listRoot = stripRoot.closest<HTMLElement>('.bili-dyn-up-list');
-  if (listRoot?.parentElement) {
-    listRoot.insertAdjacentElement('beforebegin', bar);
-  } else {
-    // 兜底：至少保证能插入
-    stripRoot.insertAdjacentElement('beforebegin', bar);
-  }
+  anchor.before(bar);
   return bar;
 }
 
@@ -332,6 +345,9 @@ function ensurePinBarResizeHandle(bar: HTMLElement, list: HTMLElement, handle: H
     }
     queuePinBarHeightPersist(list, finalHeight);
   };
+
+  disposeResizeHandle?.();
+  disposeResizeHandle = finishDrag;
 
   handle.addEventListener('pointerdown', (event) => {
     event.preventDefault();
@@ -410,13 +426,13 @@ export function renderPinBar(
   list.innerHTML = '';
 
   // 销毁旧实例（如果有），防止内存泄漏
-  if ((list as any)._sortable) {
-    (list as any)._sortable.destroy();
-    delete (list as any)._sortable;
+  if ((list as PinBarListWithPersistState).__biliPinSortable) {
+    (list as PinBarListWithPersistState).__biliPinSortable?.destroy();
+    delete (list as PinBarListWithPersistState).__biliPinSortable;
   }
 
   // 初始化 Sortable
-  (list as any)._sortable = new Sortable(list, {
+  (list as PinBarListWithPersistState).__biliPinSortable = new Sortable(list, {
     animation: 250, // 动画时间
     delay: 100, // 稍微延迟一点，避免误触点击
     delayOnTouchOnly: true,
@@ -424,7 +440,7 @@ export function renderPinBar(
     ghostClass: 'bili-pin-ghost', // 占位符样式
     dragClass: 'bili-pin-dragging', // 拖拽中样式
     direction: 'horizontal', // 主要是水平布局（grid 其实也是）
-    onEnd: (evt) => {
+    onEnd: () => {
       // 获取新的顺序
       const newOrder = Array.from(list.querySelectorAll<HTMLElement>('.bili-pin-bar__item'))
         .map((el) => el.dataset.mid)
@@ -442,8 +458,6 @@ export function renderPinBar(
     const item = document.createElement('div');
     item.className = 'bili-pin-bar__item';
     item.dataset.mid = up.mid;
-    // Sortable 会处理 draggable，不需要手动设，但为了语义化可以留着，不过 Sortable 通常不需要
-    // item.draggable = true; 
 
     const main = document.createElement('button');
     main.type = 'button';

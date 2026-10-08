@@ -10,107 +10,17 @@ export function extractMidFromHref(href: string): string | null {
   return null;
 }
 
-export function findSpaceAnchors(root: ParentNode = document): HTMLAnchorElement[] {
-  const all = Array.from(root.querySelectorAll<HTMLAnchorElement>('a[href]'));
-  return all.filter((a) => extractMidFromHref(a.href));
-}
-
-type Candidate = { el: HTMLElement; score: number; midCount: number };
-
-function uniqueMidCount(el: HTMLElement): number {
-  const mids = new Set<string>();
-  for (const a of findSpaceAnchors(el)) {
-    const mid = extractMidFromHref(a.href);
-    if (mid) mids.add(mid);
-  }
-  return mids.size;
-}
-
-function computeScore(el: HTMLElement, midCount: number): number {
-  let score = midCount;
-
-  const rect = el.getBoundingClientRect();
-  // 靠近页面顶部的候选更可能是“关注UP推荐列表”
-  if (rect.top > -100 && rect.top < 650) score += 12;
-  if (rect.height > 20 && rect.height < 200) score += 6;
-  if (rect.width > 400) score += 4;
-
-  // 横向滚动/横向布局的候选更可能是关注UP推荐列表
-  const cs = getComputedStyle(el);
-  if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') score += 10;
-  if (cs.display.includes('flex') || cs.display.includes('grid')) score += 6;
-  if (cs.whiteSpace === 'nowrap') score += 4;
-
-  return score;
-}
-
-/**
- * 尝试在动态页中定位“关注UP推荐列表”的容器。
- * 这是启发式定位：B站会改DOM，因此把策略集中在这里，方便后续调整。
- */
+/** 只接受中栏内的原生推荐横条；加载期间等待，不猜测其他空间链接容器。 */
 export function findUpAvatarStripRoot(): HTMLElement | null {
-  // 1) 明确命中：B站动态页关注UP推荐列表容器（最稳定）
-  const direct = document.querySelector<HTMLElement>('.bili-dyn-up-list__window');
-  if (direct) return direct;
-
-  const anchors = findSpaceAnchors(document);
-  if (anchors.length === 0) return null;
-
-  const candidates = new Set<HTMLElement>();
-  for (const a of anchors) {
-    const p1 = a.parentElement;
-    const p2 = p1?.parentElement;
-    const p3 = p2?.parentElement;
-    if (p1) candidates.add(p1);
-    if (p2) candidates.add(p2);
-    if (p3) candidates.add(p3);
-    const closest = a.closest<HTMLElement>('ul,ol,div,section');
-    if (closest) candidates.add(closest);
-  }
-
-  const scored: Candidate[] = [];
-  for (const el of candidates) {
-    // 排除太大的容器（比如整个feed）
-    const rect = el.getBoundingClientRect();
-    if (rect.height > 800) continue;
-
-    const midCount = uniqueMidCount(el);
-    if (midCount < 6) continue;
-    scored.push({ el, midCount, score: computeScore(el, midCount) });
-  }
-
-  scored.sort((a, b) => b.score - a.score);
-  return scored[0]?.el ?? null;
+  return document.querySelector<HTMLElement>('main .bili-dyn-up-list > .bili-dyn-up-list__window');
 }
 
-export function getStripMids(stripRoot: HTMLElement): string[] {
-  const mids: string[] = [];
-  const seen = new Set<string>();
-  for (const a of findSpaceAnchors(stripRoot)) {
-    const mid = extractMidFromHref(a.href);
-    if (!mid || seen.has(mid)) continue;
-    seen.add(mid);
-    mids.push(mid);
-  }
-  return mids;
+export function getUpAvatarStripAnchor(stripRoot: HTMLElement): HTMLElement | null {
+  if (!stripRoot.isConnected || !stripRoot.matches('.bili-dyn-up-list__window')) return null;
+  const anchor = stripRoot.parentElement;
+  if (!anchor?.matches('.bili-dyn-up-list') || !anchor.closest('main')) return null;
+  return anchor;
 }
-
-export type UpStripDiagnostics = {
-  url: string;
-  title: string;
-  totalAnchors: number;
-  midAnchors: number;
-  sampleMidHrefs: Array<{ mid: string; href: string }>;
-  candidateCount: number;
-  topCandidates: Array<{
-    tag: string;
-    className: string;
-    midCount: number;
-    score: number;
-    rect: { top: number; left: number; width: number; height: number };
-    styleHint: { display: string; overflowX: string; whiteSpace: string };
-  }>;
-};
 
 /**
  * 查找动态Feed列表容器
@@ -132,70 +42,16 @@ export function findDynamicFeedContainer(): HTMLElement | null {
   return null;
 }
 
-export function getUpAvatarStripDiagnostics(): UpStripDiagnostics {
-  const allAnchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'));
-  const midAnchors = findSpaceAnchors(document);
-
-  const sampleMidHrefs: Array<{ mid: string; href: string }> = [];
-  for (const a of midAnchors.slice(0, 12)) {
-    const mid = extractMidFromHref(a.href);
-    if (!mid) continue;
-    sampleMidHrefs.push({ mid, href: a.href });
-  }
-
-  // 候选评分（与 findUpAvatarStripRoot 相同逻辑，但会返回前 N 个，方便调试）
-  const candidates = new Set<HTMLElement>();
-  for (const a of midAnchors) {
-    const p1 = a.parentElement;
-    const p2 = p1?.parentElement;
-    const p3 = p2?.parentElement;
-    if (p1) candidates.add(p1);
-    if (p2) candidates.add(p2);
-    if (p3) candidates.add(p3);
-    const closest = a.closest<HTMLElement>('ul,ol,div,section');
-    if (closest) candidates.add(closest);
-  }
-
-  const scored: Candidate[] = [];
-  for (const el of candidates) {
-    const rect = el.getBoundingClientRect();
-    if (rect.height > 800) continue;
-    const midCount = uniqueMidCount(el);
-    if (midCount < 3) continue;
-    scored.push({ el, midCount, score: computeScore(el, midCount) });
-  }
-  scored.sort((a, b) => b.score - a.score);
-
-  const topCandidates = scored.slice(0, 8).map((c) => {
-    const rect = c.el.getBoundingClientRect();
-    const cs = getComputedStyle(c.el);
-    return {
-      tag: c.el.tagName.toLowerCase(),
-      className: c.el.className || '',
-      midCount: c.midCount,
-      score: c.score,
-      rect: {
-        top: Math.round(rect.top),
-        left: Math.round(rect.left),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      },
-      styleHint: {
-        display: cs.display,
-        overflowX: cs.overflowX,
-        whiteSpace: cs.whiteSpace,
-      },
-    };
-  });
-
+export function getUpAvatarStripDiagnostics() {
+  const strip = findUpAvatarStripRoot();
+  const anchor = strip ? getUpAvatarStripAnchor(strip) : null;
+  const bar = document.getElementById('bili-pin-pinbar');
   return {
-    url: location.href,
-    title: document.title,
-    totalAnchors: allAnchors.length,
-    midAnchors: midAnchors.length,
-    sampleMidHrefs,
-    candidateCount: scored.length,
-    topCandidates,
+    stripFound: Boolean(strip),
+    anchorParentTag: anchor?.parentElement?.tagName ?? null,
+    barFound: Boolean(bar),
+    barPlacedCorrectly: Boolean(anchor && bar?.nextElementSibling === anchor),
+    stripRect: strip?.getBoundingClientRect().toJSON() ?? null,
+    barRect: bar?.getBoundingClientRect().toJSON() ?? null,
   };
 }
-
