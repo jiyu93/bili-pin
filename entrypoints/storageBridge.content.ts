@@ -4,59 +4,21 @@
  * 目的：让 MAIN world 代码也能稳定读写 `chrome.storage.local/sync`。
  */
 
-import { STORAGE_BRIDGE_ALLOWED_KEYS } from '../src/storage/keys';
+import { isAllowedStorageKey } from '../src/storage/keys';
+import type { BridgeRequest, BridgeResponse } from '../src/utils/bridgeClient';
+import { measureStorageSnapshot } from '../src/storage/snapshot';
 
 type StorageAreaName = 'local' | 'sync';
-
-type BridgeRequest =
-  | {
-      __biliPin: 1;
-      kind: 'storage:get';
-      requestId: string;
-      area: StorageAreaName;
-      key: string;
-    }
-  | {
-      __biliPin: 1;
-      kind: 'storage:set';
-      requestId: string;
-      area: StorageAreaName;
-      key: string;
-      value: unknown;
-    };
-
-type BridgeResponse =
-  | {
-      __biliPin: 1;
-      kind: 'storage:response';
-      requestId: string;
-      ok: true;
-      found?: boolean;
-      value?: unknown;
-    }
-  | {
-      __biliPin: 1;
-      kind: 'storage:response';
-      requestId: string;
-      ok: false;
-      error: string;
-    }
-  | {
-      __biliPin: 1;
-      kind: 'storage:changed';
-      area: StorageAreaName;
-      key: string;
-    };
 
 function isRequest(data: unknown): data is BridgeRequest {
   if (!data || typeof data !== 'object') return false;
   const d = data as any;
-  return d.__biliPin === 1 && (d.kind === 'storage:get' || d.kind === 'storage:set') && typeof d.requestId === 'string';
+  return d.__biliPin === 1 && ['storage:get', 'storage:set', 'storage:snapshot', 'storage:setMany'].includes(d.kind) && typeof d.requestId === 'string' && (d.area === 'sync' || d.area === 'local');
 }
 
 function isAllowedKey(key: string): boolean {
   // 必须是 biliPin. 开头，防止污染其他数据
-  return key.startsWith('biliPin.') && STORAGE_BRIDGE_ALLOWED_KEYS.includes(key as (typeof STORAGE_BRIDGE_ALLOWED_KEYS)[number]);
+  return isAllowedStorageKey(key);
 }
 
 async function chromeStorageGet<T>(area: StorageAreaName, key: string): Promise<{ found: boolean; value?: T }> {
@@ -140,6 +102,25 @@ export default defineContentScript({
       const respond = (resp: BridgeResponse) => {
         window.postMessage(resp, '*');
       };
+
+      if (data.kind === 'storage:snapshot' || data.kind === 'storage:setMany') {
+        const area = chromeStorage?.[data.area];
+        const operation = async () => {
+          if (!area) throw new Error('storage not available');
+          if (data.kind === 'storage:snapshot') {
+            const snapshot = await area.get(null);
+            return measureStorageSnapshot(snapshot);
+          }
+          if (!data.values || typeof data.values !== 'object' || Array.isArray(data.values) || !Object.keys(data.values).every(isAllowedKey)) {
+            throw new Error('Access denied: storage keys are not allowed');
+          }
+          await area.set(data.values);
+        };
+        operation()
+          .then((value) => respond({ __biliPin: 1, kind: 'storage:response', requestId: data.requestId, ok: true, value }))
+          .catch((error) => respond({ __biliPin: 1, kind: 'storage:response', requestId: data.requestId, ok: false, error: String(error?.message || error) }));
+        return;
+      }
 
       if (data.kind === 'storage:get') {
         chromeStorageGet(data.area, data.key)

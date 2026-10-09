@@ -8,6 +8,7 @@ Bilibili Chrome MV3 扩展，使用 WXT + TypeScript + SortableJS，无后端。
 
 - `npm run dev`：开发服务器。
 - `npm run typecheck`：TypeScript 检查。
+- `npm run test`：内存存储与 MAIN/ISOLATED 桥接回归，不写真实账号数据。
 - `npm run build`：构建到 `.output/chrome-mv3`。
 - `npm run zip`：生成发布包。
 
@@ -22,8 +23,8 @@ Bilibili Chrome MV3 扩展，使用 WXT + TypeScript + SortableJS，无后端。
 
 ### 架构不变量
 
-- 存储统一经 `src/storage/config.ts`：当前 world 有 `chrome.storage` 时直接访问，否则经 `bridgeClient.ts` → `storageBridge.content.ts`。MAIN 业务模块不得直接依赖 `chrome.storage`；bridge 只放行 `STORAGE_BRIDGE_ALLOWED_KEYS`。
-- `chrome.storage.sync` 为置顶数据权威，local 只做镜像及旧数据迁移。置顶写入先做 sync 配额预检，成功写 sync 后再镜像 local；超限拒绝并提示，禁止 local-only 绕过。仅 sync 无可用置顶数据时读取旧 local。
+- 存储统一经 `src/storage/config.ts`：当前 world 有 `chrome.storage` 时直接访问，否则经 `bridgeClient.ts` → `storageBridge.content.ts`。MAIN 业务模块不得直接依赖 `chrome.storage`；bridge 只放行 `STORAGE_BRIDGE_ALLOWED_KEYS` 声明的固定键和 v4 记录前缀，动态后缀严格限制为数字 mid；批量读返回值同样过滤。
+- `chrome.storage.sync` 为置顶数据权威，local 只做镜像及旧数据迁移。置顶写入先做 sync 配额预检，成功写 sync 后再镜像 local；超限拒绝并提示，禁止 local-only 绕过。仅 sync 无可用置顶数据时读取旧 local；合法空列表和取消记录也是权威数据。首次用户操作按 mid 迁移已读取的旧状态，只读不上传。
 - 持久化主键只用真实数字字符串 `mid`；头像 hash、昵称和 DOM 位置仅用于辅助识别。API 缓存只补全运行时渲染，不在刷新时自动写回置顶数据。
 - API 拦截仅限 `portal`、`uplist`、`feed`、`relation/followings`、`relation/fans`、`relation/tag`；自身异常不得重试或吞掉真实网络请求，也不得覆盖页面回调。
 - 样式集中在 `src/styles/content.css`，由 JS 插入 `<style>`；不在 manifest 声明内容脚本 CSS。MV3 弹窗脚本独立成文件。
@@ -38,7 +39,7 @@ Bilibili Chrome MV3 扩展，使用 WXT + TypeScript + SortableJS，无后端。
 
 页面业务入口均为 MAIN；动态页和空间页拦截所需 API，搜索页和视频页不拦截。`entrypoints/storageBridge.content.ts` 在四类页面的 ISOLATED world 代理存储并转发变更。
 
-UI → `pins.ts`（`pinUp` / `unpinUp` / `setPinnedUps` / `isPinned`）→ `config.ts` → sync / local。`onPinsChange` 通知所有打开页面刷新状态；置顶状态包含排序、更新时间及删除墓碑。
+UI → `pins.ts`（`pinUp` / `unpinUp` / `reorderPinnedUps` / `isPinned`）→ `config.ts` → sync / local。v4 按 mid 分键保存置顶/取消，排序独立；不从列表缺项推导删除，不再写旧整表。`onPinsChange` 通知所有打开页面刷新状态；同一页面的写入串行执行。
 
 Feed 切换保留两条路径：推荐横条内复用原生点击；横条外用 `setDesiredHostMid` 改写后续 feed 请求的 `host_mid`，继续使用 B 站渲染链路。
 
@@ -54,8 +55,8 @@ Feed 切换保留两条路径：推荐横条内复用原生点击；横条外用
 | 搜索页 / `entrypoints/search.content.ts` | `src/ui/searchUserPin.ts` | 支持 `.b-user-video-card`、`.b-user-info-card`，按钮放 `.user-actions`；克隆时清理 disabled 和 `vui_button--disabled`。 |
 | 空间页 / `entrypoints/space.content.ts` | `src/ui/{spaceFollowMenuPin,followTime}.ts` | `.vui_popover`；header 取 URL mid，关注列表取最近 hover 的 space 链接，不能串用户；关注时间来自 relation 缓存 `mid → mtime`。 |
 | 视频页 / `entrypoints/video.content.ts` | `src/ui/videoFollowMenuPin.ts` | 优先 `window.__INITIAL_STATE__.videoData.owner`，DOM 兜底；`.van-popover.van-popper` 移除时清理 observer。 |
-| 存储与同步 | `src/storage/{pins,config,keys}.ts`、`src/utils/bridgeClient.ts` | v3 压缩写入，兼容 v2/v1；sync 权威、配额预检、local 镜像、空 sync 迁移。 |
-| API / 样式 / 弹窗 | `src/bili/apiInterceptor.ts`；`src/styles/content.css`、`src/utils/style.ts`、`src/ui/toast.ts`；`public/popup.{html,js}` | API 缓存有界；头像 URL 规范化见 `src/utils/faceUrl.ts`；弹窗仅展示置顶数量和最后同步时间。 |
+| 存储与同步 | `src/storage/{pins,config,keys}.ts`、`src/utils/bridgeClient.ts` | v4 按 mid 写记录，排序独立；兼容 v3/v2/v1；sync 权威，字节/键数配额预检，local 镜像，用户操作时迁移旧数据。 |
+| API / 样式 / 弹窗 | `src/bili/apiInterceptor.ts`；`src/styles/content.css`、`src/utils/style.ts`、`src/ui/toast.ts`；`entrypoints/popup/{index.html,main.ts}` | API 缓存有界；头像 URL 规范化见 `src/utils/faceUrl.ts`；弹窗复用置顶读取逻辑，展示数量和最后数据更新时间，不代表云端同步完成。 |
 
 ## 5. 内置浏览器调试与验证
 
@@ -69,11 +70,13 @@ Feed 切换保留两条路径：推荐横条内复用原生点击；横条外用
 
 ## 6. 当前状态与维护记录
 
-当前版本 **v1.2.2**（以 `package.json` 为准）。
+当前版本 **v1.2.3**（以 `package.json` 为准）。
 
-- PRD 所列功能均已实现；置顶数据使用 v3 压缩状态，兼容 v2/v1，sync 超限快速拒绝并提示；历史头像规范化为 HTTPS。
+- PRD 所列功能均已实现；置顶数据使用 v4 按 mid 分键记录及独立排序，兼容 v3/v2/v1，sync 超限快速拒绝并提示；历史头像规范化为 HTTPS。不同 UP 的跨设备操作互不覆盖；同一 UP 和排序冲突由浏览器同步决定，需所有设备升级。
 - API 拦截范围与缓存已收敛，XHR 使用 `loadend` 旁路读取；推荐横条刷新、列表观察及 popover 生命周期已有清理机制，改动时保持这些约束。
 - `2026-10-08`：精简维护指南和 PRD，采用内置浏览器调试；用户通过管理界面加载/重载本地扩展，Agent 接手页面验证，修正把自动化接口限制等同于浏览器能力限制的结论。涉及 `AGENTS.md`、`docs/prd.md`、`README.md`、`docs/roadmap.md`。验证：`npm run build`、manifest 版本核对（1.2.1）、文档链接及 `git diff --check` 通过；用户加载后，确认动态页样式/置顶栏/图钉按钮/菜单 hook 及 API 拦截已注入，头像加载正常，MAIN → ISOLATED 存储桥可读取真实 sync/local v3 状态且镜像一致，未观察到扩展 warn/error。未修改运行时代码；未进行置顶写入、Feed 切换或跨设备同步回归。
 - `2026-10-08`：v1.2.2 修复动态页置顶栏偶发误插三栏 flex 并被挤窄；移除启发式定位，增加明确锚点等待、错位校正、SPA 清理及串行刷新，修复按钮解禁和节点复用后的 mid。涉及 `entrypoints/content.ts`、`src/bili/{selectors,observe}.ts`、`src/ui/{injectPinButtons,pinBar}.ts`、版本文件及 PRD/roadmap。验证：内置浏览器实时 DOM 确认中栏锚点；合成页面复现旧版栏间 108px 窄条，新版为中栏 640px，`npm run typecheck`、`npm run build`、manifest 版本核对（1.2.2）及 `git diff --check` 通过；延迟加载、移除/重建、SPA 异步竞态、按钮身份及事件合并回归通过；使用临时存储/API 替身，未改账号置顶。用户重载后确认新版实例、置顶栏/推荐横条等宽（724px）、头像及按钮正常，无扩展 warn/error；临时错位后自动恢复且保留排序实例。未测试跨设备同步或账号写入。
+
+- `2026-10-09`：本批按用户要求定为 v1.2.3；修复新设备空/旧列表整表写入覆盖远端置顶，改为按 mid 写置顶/取消、排序独立；存储读取错误不再降级为空，合法空 sync 不复活旧 local。用户操作时迁移旧状态，批量桥接限制固定键/数字 mid，预检单项/总字节/键数配额；弹窗复用读取逻辑并更正时间含义。涉及 `src/storage/{pins,config,keys,snapshot}.ts`、bridge、动态页排序、`entrypoints/popup/`、版本/文档及 `tests/pins-sync.test.mjs`。验证：11 项内存回归（迟到同步、离线双设备、显式取消、排序、旧格式/空数据、错误/配额、MAIN→ISOLATED 桥及键过滤）、typecheck/build、manifest 1.2.3 与 diff 检查通过。未写真实账号、未实测浏览器云端跨设备同步；旧列表仅存在 local 时须在旧设备升级后操作以迁移，已被旧版本覆盖的数据不保证恢复。
 
 后续维护：大功能升 minor，小功能/bugfix 升 patch；同批未发版返工不重复升版，纯文档/注释/流程不升版。升版同步 `package.json`、`package-lock.json` 及本章，构建后核对 manifest 版本。每次可验收改动在本章记录日期、改动、文件及验证，保持简短；产品行为变化更新 PRD，版本历史与计划更新 roadmap。

@@ -1,10 +1,14 @@
 // 注意：本项目的“UP 唯一标识”使用 B 站 mid（数字字符串）
 
-import { observeStorageChanges, readStorageValue, writeSyncPrimaryConfig } from './config';
+import { observeStorageChanges, readStorageSnapshot, writeSyncPrimaryValues } from './config';
+import type { StorageSnapshot } from '../utils/bridgeClient';
 import {
   PINS_KEY as STORAGE_KEY,
   PINS_STATE_COMPACT_KEY as STORAGE_COMPACT_KEY,
   PINS_STATE_KEY as STORAGE_STATE_KEY,
+  PINS_RECORD_PREFIX,
+  PINS_ORDER_KEY,
+  isPinsRecordKey,
 } from './keys';
 import { compactFaceUrl, normalizeFaceUrl } from '../utils/faceUrl';
 
@@ -28,19 +32,7 @@ type PinsState = {
   updatedAt: number;
 };
 
-type CompactPinnedUp = [mid: string, name?: string, face?: string, pinnedAtDelta?: number];
-type CompactRemoved = [mid: string, removedAtDelta: number];
-type CompactPinsState = [
-  version: 3,
-  baseTime: number,
-  items: CompactPinnedUp[],
-  removed: CompactRemoved[],
-  orderUpdatedAtDelta?: number,
-  updatedAtDelta?: number,
-];
-
-const SYNC_QUOTA_BYTES_PER_ITEM = 8192;
-const PINS_SYNC_QUOTA_MESSAGE = '同步空间已满，无法继续置顶。请先取消一些置顶UP主。';
+const PINS_SYNC_QUOTA_MESSAGE = '同步空间已满，无法保存置顶。';
 const PINS_SYNC_RATE_LIMIT_MESSAGE = '同步写入过于频繁，请稍等一分钟后再试。';
 
 function serializeList(value: unknown): string {
@@ -48,6 +40,7 @@ function serializeList(value: unknown): string {
 }
 
 function normalizeItem(item: any): PinnedUp | null {
+  if (!item || typeof item !== 'object') return null;
   const face = normalizeFaceUrl(item.face);
   // 兼容读取：历史字段可能叫 uid；新字段为 mid
   const baseMid = String(item.mid ?? item.uid ?? '').trim();
@@ -122,23 +115,6 @@ function buildPinsStateFromList(list: PinnedUp[]): PinsState {
   };
 }
 
-function getJsonBytes(value: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(value ?? null)).length;
-}
-
-function getStorageItemBytes(key: string, value: unknown): number {
-  return new TextEncoder().encode(key).length + getJsonBytes(value);
-}
-
-function fitsSyncItemQuota(key: string, value: unknown): boolean {
-  return getStorageItemBytes(key, value) <= SYNC_QUOTA_BYTES_PER_ITEM;
-}
-
-function assertFitsSyncItemQuota(key: string, value: unknown): void {
-  if (fitsSyncItemQuota(key, value)) return;
-  throw new Error(PINS_SYNC_QUOTA_MESSAGE);
-}
-
 function normalizePinsWriteError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   if (/MAX_WRITE_OPERATIONS_PER_MINUTE|max_write/i.test(message)) {
@@ -150,75 +126,11 @@ function normalizePinsWriteError(error: unknown): Error {
   return error instanceof Error ? error : new Error(message);
 }
 
-function getCompactBaseTime(state: PinsState): number {
-  const timestamps = [
-    state.orderUpdatedAt,
-    state.updatedAt,
-    ...state.items.flatMap((item) => [item.pinnedAt, item.updatedAt]),
-    ...Object.values(state.removed),
-  ].filter((value) => Number.isFinite(value) && value > 0);
-  return timestamps.length ? Math.min(...timestamps) : 0;
-}
-
-function toCompactDelta(value: number, baseTime: number): number | undefined {
-  if (!Number.isFinite(value) || value <= 0) return undefined;
-  if (!Number.isFinite(baseTime) || baseTime <= 0) return Math.round(value);
-  return Math.max(0, Math.round(value - baseTime));
-}
-
 function fromCompactDelta(value: unknown, baseTime: number): number {
   const delta = Number(value);
   if (!Number.isFinite(delta) || delta < 0) return 0;
   if (!Number.isFinite(baseTime) || baseTime <= 0) return Math.round(delta);
   return Math.round(baseTime + delta);
-}
-
-function getOrderedSyncedItems(state: PinsState): SyncedPinnedUp[] {
-  const itemMap = getStateItemMap(state);
-  const ordered: SyncedPinnedUp[] = [];
-
-  for (const mid of state.order) {
-    const item = itemMap.get(mid);
-    if (!item) continue;
-    ordered.push(item);
-    itemMap.delete(mid);
-  }
-
-  const remaining = Array.from(itemMap.values()).sort((a, b) => {
-    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-    return b.pinnedAt - a.pinnedAt;
-  });
-  ordered.push(...remaining);
-  return ordered;
-}
-
-function compactPinsState(state: PinsState): CompactPinsState {
-  const baseTime = getCompactBaseTime(state);
-  const items = getOrderedSyncedItems(state).map((item): CompactPinnedUp => {
-    const row: CompactPinnedUp = [item.mid];
-    const name = String(item.name ?? '').trim();
-    const face = compactFaceUrl(item.face);
-    const pinnedAtDelta = toCompactDelta(item.pinnedAt, baseTime);
-
-    if (name || face || pinnedAtDelta != null) row.push(name);
-    if (face || pinnedAtDelta != null) row.push(face ?? '');
-    if (pinnedAtDelta != null) row.push(pinnedAtDelta);
-
-    return row;
-  });
-  const removed = Object.entries(state.removed)
-    .map(([mid, removedAt]): CompactRemoved | null => {
-      const delta = toCompactDelta(removedAt, baseTime);
-      return delta == null ? null : [mid, delta];
-    })
-    .filter(Boolean) as CompactRemoved[];
-  const orderUpdatedAtDelta = toCompactDelta(state.orderUpdatedAt, baseTime);
-  const updatedAtDelta = toCompactDelta(state.updatedAt, baseTime);
-
-  const compact: CompactPinsState = [3, baseTime, items, removed];
-  if (orderUpdatedAtDelta != null || updatedAtDelta != null) compact.push(orderUpdatedAtDelta ?? 0);
-  if (updatedAtDelta != null) compact.push(updatedAtDelta);
-  return compact;
 }
 
 function normalizeCompactPinsState(value: unknown): PinsState {
@@ -365,7 +277,7 @@ function mergePinsStates(states: PinsState[]): PinsState {
     for (const [mid, removedAt] of Object.entries(state.removed)) {
       if (!/^\d+$/.test(mid) || removedAt <= 0) continue;
       const existing = itemMap.get(mid);
-      if (!existing || removedAt > existing.updatedAt) {
+      if (!existing || removedAt >= existing.updatedAt) {
         itemMap.delete(mid);
         removed[mid] = Math.max(removed[mid] ?? 0, removedAt);
         updatedAt = Math.max(updatedAt, removedAt);
@@ -374,7 +286,7 @@ function mergePinsStates(states: PinsState[]): PinsState {
 
     for (const item of state.items) {
       const removedAt = removed[item.mid] ?? 0;
-      if (removedAt > item.updatedAt) continue;
+      if (removedAt >= item.updatedAt) continue;
 
       const existing = itemMap.get(item.mid);
       if (!existing || item.updatedAt >= existing.updatedAt) {
@@ -411,45 +323,115 @@ function mergePinsStates(states: PinsState[]): PinsState {
   };
 }
 
-async function writePinsSnapshot(state: PinsState): Promise<void> {
-  const compact = compactPinsState(state);
-  assertFitsSyncItemQuota(STORAGE_COMPACT_KEY, compact);
-  try {
-    await writeSyncPrimaryConfig(STORAGE_COMPACT_KEY, compact);
-  } catch (error) {
-    throw normalizePinsWriteError(error);
-  }
-}
+// v4 每个 mid 一个独立记录；0 是显式取消，记录缺失不代表取消。
+type PinRecord = [version: 4, updatedAt: number, pinned: 0 | 1, name?: string, face?: string, pinnedAt?: number];
+type PinOrder = [version: 4, updatedAt: number, mids: string[]];
 
 function hasPinsStateData(state: PinsState): boolean {
   return state.items.length > 0 || Object.keys(state.removed).length > 0 || state.order.length > 0;
 }
 
-async function getAuthoritativePinsState(): Promise<PinsState> {
-  const [syncCompactEntry, localCompactEntry, syncStateEntry, localStateEntry, syncLegacyEntry, localLegacyEntry] = await Promise.all([
-    readStorageValue<CompactPinsState>('sync', STORAGE_COMPACT_KEY),
-    readStorageValue<CompactPinsState>('local', STORAGE_COMPACT_KEY),
-    readStorageValue<PinsState>('sync', STORAGE_STATE_KEY),
-    readStorageValue<PinsState>('local', STORAGE_STATE_KEY),
-    readStorageValue<any[]>('sync', STORAGE_KEY),
-    readStorageValue<any[]>('local', STORAGE_KEY),
-  ]);
+function isPinRecord(value: unknown): value is PinRecord {
+  return Array.isArray(value) && value[0] === 4 && Number.isFinite(value[1]) && value[1] > 0 && (value[2] === 0 || value[2] === 1);
+}
 
-  const syncState = syncStateEntry.found
-    ? normalizePinsState(syncStateEntry.value)
-    : buildPinsStateFromList(normalizeList(syncLegacyEntry.value));
-  const localState = localStateEntry.found
-    ? normalizePinsState(localStateEntry.value)
-    : buildPinsStateFromList(normalizeList(localLegacyEntry.value));
-  const syncCompactState = syncCompactEntry.found ? normalizeCompactPinsState(syncCompactEntry.value) : buildPinsStateFromList([]);
-  const syncListState = buildPinsStateFromList(normalizeList(syncLegacyEntry.value));
-  const syncAuthoritative = mergePinsStates([syncState, syncListState, syncCompactState]);
-  const syncHasData = hasPinsStateData(syncAuthoritative);
-  const localCompactState = localCompactEntry.found ? normalizeCompactPinsState(localCompactEntry.value) : buildPinsStateFromList([]);
-  const localListState = buildPinsStateFromList(normalizeList(localLegacyEntry.value));
-  const localAuthoritative = mergePinsStates([localState, localListState, localCompactState]);
-  const authoritative = syncHasData ? syncAuthoritative : localAuthoritative;
-  return authoritative;
+function isPinOrder(value: unknown): value is PinOrder {
+  return Array.isArray(value) && value[0] === 4 && Number.isFinite(value[1]) && value[1] > 0 && Array.isArray(value[2]);
+}
+
+function decodeSnapshot(snapshot: Record<string, unknown>): { state: PinsState; available: boolean } {
+  const compact = snapshot[STORAGE_COMPACT_KEY];
+  const v2 = snapshot[STORAGE_STATE_KEY] as any;
+  const legacy = snapshot[STORAGE_KEY];
+  const compactValid = Array.isArray(compact) && compact[0] === 3 && Array.isArray(compact[2]) && Array.isArray(compact[3]);
+  const v2Valid = v2?.version === 2 && Array.isArray(v2.items);
+  const legacyValid = Array.isArray(legacy);
+  const state = mergePinsStates([
+    compactValid ? normalizeCompactPinsState(compact) : buildPinsStateFromList([]),
+    v2Valid ? normalizePinsState(v2) : buildPinsStateFromList([]),
+    buildPinsStateFromList(normalizeList(legacy)),
+  ]);
+  let available = compactValid || v2Valid || legacyValid;
+  const items = getStateItemMap(state);
+  // 新协议的操作直接覆盖同一 mid 的旧协议数据，避免旧整表使已取消的 UP 复活。
+  for (const [key, record] of Object.entries(snapshot)) {
+    if (!isPinsRecordKey(key) || !isPinRecord(record)) continue;
+    available = true;
+    const mid = key.slice(PINS_RECORD_PREFIX.length);
+    if (record[2] === 0) {
+      items.delete(mid);
+      state.removed[mid] = record[1];
+    } else {
+      items.set(mid, {
+        mid,
+        name: typeof record[3] === 'string' ? record[3] || undefined : undefined,
+        face: normalizeFaceUrl(record[4]),
+        pinnedAt: Number.isFinite(record[5]) && record[5]! > 0 ? record[5]! : record[1],
+        updatedAt: record[1],
+      });
+      delete state.removed[mid];
+    }
+    state.updatedAt = Math.max(state.updatedAt, record[1]);
+  }
+  state.items = Array.from(items.values());
+  const order = snapshot[PINS_ORDER_KEY];
+  if (isPinOrder(order)) {
+    state.order = order[2].filter((mid, index, all) => typeof mid === 'string' && items.has(mid) && all.indexOf(mid) === index);
+    state.orderUpdatedAt = order[1];
+    state.updatedAt = Math.max(state.updatedAt, order[1]);
+  }
+  return { state, available };
+}
+
+async function readPinsContext(): Promise<{ state: PinsState; sync: StorageSnapshot }> {
+  // 读取错误必须向上传递，不能把 bridge 超时解释成空列表。
+  const sync = await readStorageSnapshot('sync');
+  const decoded = decodeSnapshot(sync.values);
+  if (decoded.available) return { state: decoded.state, sync };
+  const local = await readStorageSnapshot('local');
+  return { state: decodeSnapshot(local.values).state, sync };
+}
+
+async function getAuthoritativePinsState(): Promise<PinsState> {
+  return (await readPinsContext()).state;
+}
+
+function toPinRecord(item: SyncedPinnedUp): PinRecord {
+  return [4, item.updatedAt, 1, item.name || '', compactFaceUrl(item.face) || '', item.pinnedAt];
+}
+
+function migrationRecords(state: PinsState, sync: StorageSnapshot): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  // 仅在用户操作时迁移已读到的旧数据；从不发布空的整表。
+  for (const item of state.items) {
+    const key = PINS_RECORD_PREFIX + item.mid;
+    if (!isPinRecord(sync.values[key])) values[key] = toPinRecord(item);
+  }
+  for (const [mid, removedAt] of Object.entries(state.removed)) {
+    const key = PINS_RECORD_PREFIX + mid;
+    if (!isPinRecord(sync.values[key])) values[key] = [4, removedAt, 0] satisfies PinRecord;
+  }
+  return values;
+}
+
+let mutationQueue: Promise<unknown> = Promise.resolve();
+function mutatePins(change: (state: PinsState, values: Record<string, unknown>, now: number) => void): Promise<PinnedUp[]> {
+  const operation = mutationQueue.then(async () => {
+    const { state, sync } = await readPinsContext();
+    const values = migrationRecords(state, sync);
+    const now = Math.max(Date.now(), state.updatedAt + 1);
+    change(state, values, now);
+    try {
+      await writeSyncPrimaryValues(values, sync);
+    } catch (error) {
+      throw normalizePinsWriteError(error);
+    }
+    const pins = await getPinnedUps();
+    notifyListeners(pins);
+    return pins;
+  });
+  mutationQueue = operation.catch(() => {});
+  return operation;
 }
 
 export async function getPinnedUps(): Promise<PinnedUp[]> {
@@ -490,70 +472,42 @@ function ensureStorageObserver() {
   if (stopStorageObserver) return;
 
   let scheduled = false;
-  stopStorageObserver = observeStorageChanges([STORAGE_KEY, STORAGE_STATE_KEY, STORAGE_COMPACT_KEY], () => {
+  let dirty = false;
+  stopStorageObserver = observeStorageChanges([STORAGE_KEY, STORAGE_STATE_KEY, STORAGE_COMPACT_KEY, PINS_ORDER_KEY, PINS_RECORD_PREFIX], () => {
+    dirty = true;
     if (scheduled) return;
     scheduled = true;
     queueMicrotask(async () => {
-      scheduled = false;
-      if (listeners.size === 0) return;
       try {
-        const pins = await getPinnedUps();
-        const snapshot = serializeList(pins);
-        if (snapshot === lastNotifiedSnapshot) return;
-        notifyListeners(pins);
+        while (dirty && listeners.size > 0) {
+          dirty = false;
+          const pins = await getPinnedUps();
+          if (dirty || listeners.size === 0) continue;
+          const snapshot = serializeList(pins);
+          if (snapshot !== lastNotifiedSnapshot) notifyListeners(pins);
+        }
       } catch (error) {
         console.warn('[bili-pin] failed to refresh pins from storage change', error);
+      } finally {
+        scheduled = false;
       }
     });
   });
 }
 
-export async function setPinnedUps(list: PinnedUp[]): Promise<void> {
-  const currentState = await getAuthoritativePinsState();
-  const currentItems = getStateItemMap(currentState);
-  const nextList = uniqByUid(
-    (Array.isArray(list) ? list : []).map((item) => normalizeItem(item)).filter(Boolean) as PinnedUp[],
-  );
-  const nextMidSet = new Set(nextList.map((item) => item.mid));
-  const now = Date.now();
-  const nextItems: SyncedPinnedUp[] = [];
-  const nextRemoved: Record<string, number> = { ...currentState.removed };
-
-  for (const item of nextList) {
-    const existing = currentItems.get(item.mid);
-    const changed =
-      !existing ||
-      existing.name !== item.name ||
-      existing.face !== item.face ||
-      existing.pinnedAt !== item.pinnedAt;
-    nextItems.push({
-      mid: item.mid,
-      name: item.name,
-      face: item.face,
-      pinnedAt: item.pinnedAt,
-      updatedAt: changed ? now : existing.updatedAt,
-    });
-    delete nextRemoved[item.mid];
-  }
-
-  for (const item of currentItems.values()) {
-    if (nextMidSet.has(item.mid)) continue;
-    nextRemoved[item.mid] = Math.max(nextRemoved[item.mid] ?? 0, now);
-  }
-
-  const nextState: PinsState = {
-    version: 2,
-    items: nextItems,
-    removed: nextRemoved,
-    order: nextList.map((item) => item.mid),
-    orderUpdatedAt: now,
-    updatedAt: now,
-  };
-
-  await writePinsSnapshot(nextState);
-
-  // 通知监听器
-  notifyListeners(nextList);
+/** 排序仅改变顺序，不从 UI 列表的缺项推导取消置顶。 */
+export async function reorderPinnedUps(mids: string[]): Promise<void> {
+  await mutatePins((state, values, now) => {
+    const current = derivePinnedUpsFromState(state);
+    const remaining = new Set(current.map((item) => item.mid));
+    const order: string[] = [];
+    for (const mid of mids) {
+      if (!remaining.delete(mid)) continue;
+      order.push(mid);
+    }
+    order.push(...remaining);
+    if (order.length) values[PINS_ORDER_KEY] = [4, now, order] satisfies PinOrder;
+  });
 }
 
 export async function isPinned(mid: string): Promise<boolean> {
@@ -574,70 +528,23 @@ export async function pinUp(
     throw new Error(`无法置顶：未获取到真实的UP ID。请确保该UP在推荐列表中，或等待页面加载完成后再试。`);
   }
 
-  const list = await getPinnedUps();
-  const existing = list.find((x) => x.mid === inputMid);
-  const next: PinnedUp = {
-    mid: inputMid,
-    name: input.name ?? existing?.name,
-    face: face ?? existing?.face,
-    pinnedAt: input.pinnedAt ?? existing?.pinnedAt ?? Date.now(),
-  };
-
-  const merged = [next, ...list.filter((x) => x.mid !== inputMid)];
-  await setPinnedUps(merged);
-  return await getPinnedUps();
-}
-
-/**
- * 更新UP的mid（用于迁移旧数据）
- * 注意：现在只接受真实的数字mid，此函数主要用于数据迁移
- */
-export async function updateUpMid(oldMid: string, newMid: string): Promise<PinnedUp[]> {
-  if (!/^\d+$/.test(newMid)) {
-    console.warn('[bili-pin] invalid newMid', { newMid });
-    return await getPinnedUps();
-  }
-
-  const list = await getPinnedUps();
-  
-  // 查找匹配的UP（通过旧的uid）
-  const index = list.findIndex((x) => x.mid === oldMid);
-  
-  if (index >= 0) {
-    // 更新为新的mid
-    const existing = list[index];
-    const updated: PinnedUp = {
-      ...existing,
-      mid: newMid,
-    };
-    
-    // 移除旧的，添加新的
-    const updatedList = [...list];
-    updatedList[index] = updated;
-    await setPinnedUps(updatedList);
-    
-    console.debug('[bili-pin] updated UP mid', { 
-      oldMid, 
-      newMid,
-      name: existing.name 
-    });
-  }
-  
-  return await getPinnedUps();
+  return mutatePins((state, values, now) => {
+    const list = derivePinnedUpsFromState(state);
+    const existing = list.find((item) => item.mid === inputMid);
+    values[PINS_RECORD_PREFIX + inputMid] = [
+      4, now, 1, input.name ?? existing?.name ?? '',
+      compactFaceUrl(face ?? existing?.face) ?? '', input.pinnedAt ?? existing?.pinnedAt ?? now,
+    ] satisfies PinRecord;
+    values[PINS_ORDER_KEY] = [
+      4, now, [inputMid, ...list.filter((item) => item.mid !== inputMid).map((item) => item.mid)],
+    ] satisfies PinOrder;
+  });
 }
 
 export async function unpinUp(mid: string): Promise<PinnedUp[]> {
   const target = String(mid ?? '').trim();
-  
-  // 只处理真实的数字mid
-  if (!/^\d+$/.test(target)) {
-    console.warn('[bili-pin] cannot unpin: invalid mid', { mid: target });
-    return await getPinnedUps();
-  }
-
-  const list = await getPinnedUps();
-  const next = list.filter((x) => x.mid !== target);
-
-  await setPinnedUps(next);
-  return next;
+  if (!/^\d+$/.test(target)) return getPinnedUps();
+  return mutatePins((_state, values, now) => {
+    values[PINS_RECORD_PREFIX + target] = [4, now, 0] satisfies PinRecord;
+  });
 }

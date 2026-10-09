@@ -2,10 +2,14 @@ import {
   bridgeListenStorageChanges,
   bridgeStorageGet,
   bridgeStorageSet,
+  bridgeStorageSnapshot,
+  bridgeStorageSetMany,
+  type StorageSnapshot,
   type StorageAreaName,
   type StorageReadResult,
 } from '../utils/bridgeClient';
-import { SYNC_META_KEY, SYNC_MIGRATION_KEY } from './keys';
+import { SYNC_META_KEY, SYNC_MIGRATION_KEY, PINS_RECORD_PREFIX, isPinsRecordKey } from './keys';
+import { measureStorageSnapshot, storageItemBytes } from './snapshot';
 
 type MigrationState = Record<string, 1>;
 export type SyncMeta = {
@@ -54,10 +58,40 @@ export async function readStorageValue<T>(
     });
   }
 
+  return await bridgeStorageGet<T>(area, key);
+}
+
+export async function readStorageSnapshot(area: StorageAreaName): Promise<StorageSnapshot> {
+  const storage = getChromeStorageArea(area);
+  if (storage?.get) return measureStorageSnapshot(await storage.get(null));
+  return bridgeStorageSnapshot(area);
+}
+
+async function writeStorageValues(area: StorageAreaName, values: Record<string, unknown>): Promise<void> {
+  const storage = getChromeStorageArea(area);
+  if (storage?.set) await storage.set(values);
+  else await bridgeStorageSetMany(area, values);
+}
+
+export async function writeSyncPrimaryValues(values: Record<string, unknown>, snapshot: StorageSnapshot): Promise<void> {
+  const entries = Object.entries(values);
+  if (!entries.length) return;
+  let bytes = snapshot.bytes;
+  let count = snapshot.count;
+  for (const [key, value] of entries) {
+    const itemBytes = storageItemBytes(key, value);
+    if (itemBytes > 8192) throw new Error('同步空间已满，无法保存置顶。');
+    if (Object.prototype.hasOwnProperty.call(snapshot.values, key)) bytes -= storageItemBytes(key, snapshot.values[key]);
+    else count++;
+    bytes += itemBytes;
+  }
+  if (bytes > 102400) throw new Error('同步空间已满，无法保存置顶。');
+  if (count > 512) throw new Error('同步记录数量已达上限，无法新增置顶记录。');
+  await writeStorageValues('sync', values);
   try {
-    return await bridgeStorageGet<T>(area, key);
-  } catch {
-    return { found: false };
+    await writeStorageValues('local', { ...values, [SYNC_META_KEY]: { lastSyncWriteAt: Date.now() } });
+  } catch (error) {
+    console.warn('[bili-pin] failed to mirror pins locally', toErrorMessage(error));
   }
 }
 
@@ -142,40 +176,13 @@ export async function writeMirroredConfig<T>(key: string, value: T): Promise<voi
   }
 }
 
-export async function writeSyncPrimaryConfig<T>(key: string, value: T): Promise<void> {
-  await writeStorageValue('sync', key, value);
-  const syncWriteAt = Date.now();
-
-  try {
-    await writeStorageValue('local', key, value);
-  } catch (error) {
-    console.warn('[bili-pin] failed to mirror sync config locally', { key, error: toErrorMessage(error) });
-  }
-
-  if (key !== SYNC_META_KEY) {
-    try {
-      await writeStorageValue<SyncMeta>('local', SYNC_META_KEY, {
-        lastSyncWriteAt: syncWriteAt,
-      });
-    } catch (error) {
-      console.warn('[bili-pin] failed to write sync meta', { key, error: toErrorMessage(error) });
-    }
-  }
-
-  try {
-    await markConfigMigrated(key);
-  } catch (error) {
-    console.warn('[bili-pin] failed to mark config migration', { key, error: toErrorMessage(error) });
-  }
-}
-
 export function observeStorageChanges(
   keys: string[],
   callback: (change: { area: StorageAreaName; key: string }) => void,
 ): () => void {
   const keySet = new Set(keys);
   const handler = (area: StorageAreaName, changedKey: string) => {
-    if (!keySet.has(changedKey)) return;
+    if (!keySet.has(changedKey) && !(keySet.has(PINS_RECORD_PREFIX) && isPinsRecordKey(changedKey))) return;
     callback({ area, key: changedKey });
   };
 

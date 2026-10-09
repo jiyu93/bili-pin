@@ -1,5 +1,5 @@
 import { filterFeedDirectly } from '../bili/clickBridge';
-import { getPinnedUps, pinUp, setPinnedUps, unpinUp, onPinsChange, type PinnedUp } from '../storage/pins';
+import { getPinnedUps, pinUp, reorderPinnedUps, unpinUp, onPinsChange, type PinnedUp } from '../storage/pins';
 import { ensurePinBar, ensurePinBarPrefs, renderPinBar, removePinBar, setActiveMid } from './pinBar';
 import { showToast } from './toast';
 import { getDesiredHostMid, getUpInfoByFace, getUpInfoByName, getUpInfoByMid, setDesiredHostMid } from '../bili/apiInterceptor';
@@ -312,27 +312,16 @@ async function refreshPinUi(stripRoot: HTMLElement): Promise<void> {
         queuePinUiRefresh();
       } catch (err) {
         console.warn('[bili-pin] unpin failed', err);
+        showToast(err instanceof Error ? err.message : String(err));
       }
     },
     onReorder: async (newOrderMids) => {
-      const pinned = await getPinnedUps();
-      const map = new Map(pinned.map((p) => [p.mid, p]));
-      const next: PinnedUp[] = [];
-
-      for (const mid of newOrderMids) {
-        const p = map.get(mid);
-        if (p) {
-          next.push(p);
-          map.delete(mid);
-        }
+      try {
+        await reorderPinnedUps(newOrderMids);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err));
+        queuePinUiRefresh();
       }
-
-      // 兜底：保留任何不在新顺序里的项
-      for (const p of map.values()) {
-        next.push(p);
-      }
-
-      await setPinnedUps(next);
     },
   });
 

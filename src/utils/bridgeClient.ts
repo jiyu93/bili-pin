@@ -2,6 +2,8 @@
 // 负责在 MAIN world 中与 ISOLATED world 的 bridge 进行通信
 
 export type BridgeRequest =
+  | { __biliPin: 1; kind: 'storage:snapshot'; requestId: string; area: StorageAreaName }
+  | { __biliPin: 1; kind: 'storage:setMany'; requestId: string; area: StorageAreaName; values: Record<string, unknown> }
   | { __biliPin: 1; kind: 'storage:get'; requestId: string; area: StorageAreaName; key: string }
   | { __biliPin: 1; kind: 'storage:set'; requestId: string; area: StorageAreaName; key: string; value: unknown };
 
@@ -11,6 +13,12 @@ export type BridgeResponse =
   | { __biliPin: 1; kind: 'storage:changed'; area: StorageAreaName; key: string };
 
 export type StorageAreaName = 'local' | 'sync';
+
+export type StorageSnapshot = {
+  values: Record<string, unknown>;
+  bytes: number;
+  count: number;
+};
 
 export type StorageReadResult<T> =
   | {
@@ -106,6 +114,24 @@ export async function bridgeStorageSet<T>(
     }
   }
   throw lastErr ?? new Error('storage bridge set failed');
+}
+
+export async function bridgeStorageSnapshot(area: StorageAreaName): Promise<StorageSnapshot> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await requestViaBridge({ __biliPin: 1, kind: 'storage:snapshot', requestId: randomId(), area }, 600);
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 50 + attempt * 80));
+    }
+  }
+  throw lastError;
+}
+
+export async function bridgeStorageSetMany(area: StorageAreaName, values: Record<string, unknown>): Promise<void> {
+  // 不重试写入：超时后的旧请求可能已成功，重试会覆盖后来的操作。
+  return requestViaBridge({ __biliPin: 1, kind: 'storage:setMany', requestId: randomId(), area, values }, 2000);
 }
 
 export function bridgeListenStorageChanges(

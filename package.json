@@ -1,6 +1,6 @@
 {
   "name": "bili-pin",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Bilibili 动态页置顶动态 + 个人空间页已关注菜单置顶动态（浏览器扩展）",
   "private": true,
   "scripts": {
@@ -8,7 +8,8 @@
     "build": "wxt build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "zip": "wxt zip",
-    "prepare": "wxt prepare"
+    "prepare": "wxt prepare",
+    "test": "node --test tests/*.test.mjs"
   },
   "keywords": [],
   "author": "",
@@ -19,6 +20,7 @@
   "license": "MIT",
   "type": "module",
   "devDependencies": {
+    "esbuild": "0.27.2",
     "typescript": "^5.9.3",
     "wxt": "^0.20.13"
   },
