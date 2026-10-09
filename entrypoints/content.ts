@@ -6,6 +6,7 @@ import { installDebugBridge } from '../src/bili/debugBridge';
 import { initApiInterceptor } from '../src/bili/apiInterceptor';
 import { observeDynamicFeedMoreMenu } from '../src/ui/dynamicMoreMenuPin';
 import { observeDynamicUserProfilePin } from '../src/ui/dynamicUserProfilePin';
+import { observeDynamicSidebar } from '../src/ui/dynamicSidebar';
 
 export default defineContentScript({
   matches: ['https://t.bilibili.com/*'],
@@ -23,6 +24,7 @@ export default defineContentScript({
     observeDynamicFeedMoreMenu();
     // 动态页头像/昵称 hover 出现的用户资料卡里注入“置顶UP主/取消置顶”
     observeDynamicUserProfilePin();
+    observeDynamicSidebar();
 
     observeUpAvatarStrip(injectPinUi);
   },

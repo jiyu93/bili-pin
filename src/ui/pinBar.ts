@@ -8,8 +8,10 @@ import {
   PIN_BAR_EXPANDED_STATE_KEY,
   PIN_BAR_HEIGHT_KEY,
   PIN_BAR_HEIGHT_STATE_KEY,
+  PIN_BAR_COLLAPSED_KEY,
 } from '../storage/keys';
 import { normalizeFaceUrl } from '../utils/faceUrl';
+import { installPanelCollapse } from './collapsiblePanel';
 
 export const PIN_BAR_ID = 'bili-pin-pinbar';
 export const PIN_BAR_LIST_ID = 'bili-pin-pinbar-list';
@@ -48,8 +50,11 @@ export type PinBarHandlers = {
 let currentActiveMid: string | null = null;
 let activeBar: HTMLElement | null = null;
 let disposeResizeHandle: (() => void) | null = null;
+let disposeCollapse: (() => void) | null = null;
 
 export function removePinBar(): void {
+  disposeCollapse?.();
+  disposeCollapse = null;
   disposeResizeHandle?.();
   disposeResizeHandle = null;
   const bar = activeBar ?? document.getElementById(PIN_BAR_ID);
@@ -280,7 +285,7 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement | null {
 
   const titleText = document.createElement('span');
   titleText.className = 'bili-pin-bar__titleText';
-  titleText.textContent = '置顶UP主';
+  titleText.textContent = '置顶';
 
   const count = document.createElement('span');
   count.id = PIN_BAR_COUNT_ID;
@@ -307,6 +312,7 @@ export function ensurePinBar(stripRoot: HTMLElement): HTMLElement | null {
   bar.appendChild(list);
   bar.appendChild(resize);
   ensurePinBarResizeHandle(bar, list, resize);
+  disposeCollapse = installPanelCollapse(bar, header, PIN_BAR_COLLAPSED_KEY, '置顶', () => disposeResizeHandle?.());
 
   anchor.before(bar);
   return bar;

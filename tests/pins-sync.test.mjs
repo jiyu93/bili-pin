@@ -211,6 +211,24 @@ test('实际 MAIN → ISOLATED bridge 批量读写与变更转发；拒绝越界
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(notifications[0].sort(), ['2', '3']);
   stop();
+  const collapseKeys = ['biliPin.ui.pinBarCollapsed.v1', 'biliPin.ui.trendingsCollapsed.v1'];
+  for (const area of ['sync', 'local']) {
+    const requestId = `collapse-${area}`;
+    window.postMessage({ __biliPin: 1, kind: 'storage:setMany', requestId, area, values: {
+      [collapseKeys[0]]: false, [collapseKeys[1]]: true,
+    } });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(messages.find((message) => message.kind === 'storage:response' && message.requestId === requestId).ok, true);
+    for (const [index, key] of collapseKeys.entries()) {
+      const readId = `read-${area}-${index}`;
+      window.postMessage({ __biliPin: 1, kind: 'storage:get', requestId: readId, area, key });
+      await new Promise((resolve) => setImmediate(resolve));
+      const response = messages.find((message) => message.kind === 'storage:response' && message.requestId === readId);
+      assert.equal(response.found, true);
+      assert.equal(response.value, index === 1);
+      assert.ok(messages.some((message) => message.kind === 'storage:changed' && message.area === area && message.key === key));
+    }
+  }
   const before = d.writes.length;
   for (const badKey of ['secret', 'biliPin.pins.record.v4.', 'biliPin.pins.record.v4.not-a-mid', 'biliPin.unknown']) {
     const requestId = `denied-${badKey}`;
